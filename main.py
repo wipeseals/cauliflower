@@ -6,6 +6,9 @@ led = Pin("LED", Pin.OUT)
 
 
 class NandCmd:
+    READ_1ST = 0x00
+    READ_2ND = 0x30
+
     READ_ID = 0x90
 
 
@@ -95,6 +98,7 @@ class NandIo:
 
     def set_wpb(self, value: int) -> None:
         self.wpb.value(value)
+        self.debug(f"WPB\t{value}")
         time.sleep_us(100)
 
     def set_reb(self, value: int) -> None:
@@ -163,14 +167,53 @@ class NandIo:
             datas.append(self.get_io())
             self.set_reb(1)
             self.seq_delay()
-        self.set_io_dir(is_output=True)
         self.debug(f"DOUT\t{datas.hex()}")
+        self.set_io_dir(is_output=True)
         return datas
+
+    def wait_busy(self, timeout_ms: int) -> bool:
+        start = time.ticks_ms()
+        while self.get_rbb() == 0:
+            if time.ticks_diff(time.ticks_ms(), start) > timeout_ms:
+                return False
+        return True
+
+
+class NandConfig:
+    """NAND Flash Configuration for JISC-SSD TC58NVG0S3HTA00"""
+
+    # JISC-SSD TC58NVG0S3HTA00 x 2
+    MAX_CS = 2
+    # ID Read Command for TC58NVG0S3HTA00
+    READ_ID_EXPECT = bytearray([0x98, 0xF1, 0x80, 0x15, 0x72])
+    # 2048byte(main) + 128byte(redundancy or other uses)
+    PAGE_BYTES = 2048 + 128
+
+    @staticmethod
+    def create_nand_addr(block: int, page: int, col: int) -> bytearray:
+        """Create NAND Flash Address
+
+        | cycle# | Data                  |
+        |--------|-----------------------|
+        | 0      | COL[7:0]              |
+        | 1      | COL[15:8]             |
+        | 2      | BLOCK[1:0], PAGE[5:0] |
+        | 3      | BLOCK[10:2]           |
+        """
+        addr = bytearray()
+        addr.append(col & 0xFF)
+        addr.append((col >> 8) & 0xFF)
+        addr.append(((block & 0x3) << 6) | (page & 0x3F))
+        addr.append((block >> 2) & 0xFF)
+        return addr
 
 
 class NandCommander:
-    def __init__(self, nand: NandIo, is_debug: bool = True) -> None:
+    def __init__(
+        self, nand: NandIo, timeout_ms: int = 1000, is_debug: bool = True
+    ) -> None:
         self.is_debug = is_debug
+        self.timeout_ms = timeout_ms
         self.nand = nand
 
     def debug(self, msg: str) -> None:
@@ -181,14 +224,6 @@ class NandCommander:
     # Communication functions
     ########################################################
     def read_id(self, cs_index: int, num_bytes: int = 5) -> bytearray:
-        """ID Read Commandを実行し、IDを取得する
-
-        Args:
-            cs_index (int): CS index
-
-        Returns:
-            bytearray: ID Readの結果
-        """
         # initialize
         self.nand.init_pin()
         # CS select
@@ -206,8 +241,35 @@ class NandCommander:
 
         return id
 
-    # def read_page(self, cs_index: int, addr:NandAddr) -> bytearray:
-    #     addr.
+    def read_page(
+        self,
+        cs_index: int,
+        block: int,
+        page: int,
+        col: int = 0,
+        num_bytes: int = NandConfig.PAGE_BYTES,
+    ) -> bytearray | None:
+        addr = NandConfig.create_nand_addr(block=block, page=page, col=col)
+        # initialize
+        self.nand.init_pin()
+        # CS select
+        self.nand.set_ceb(cs_index=cs_index)
+        # 1st Command Input
+        self.nand.input_cmd(NandCmd.READ_1ST)
+        # Address Input
+        self.nand.input_addrs(addr)
+        # 2nd Command Input
+        self.nand.input_cmd(NandCmd.READ_2ND)
+        # Wait Busy
+        is_ok = self.nand.wait_busy(timeout_ms=self.timeout_ms)
+        if not is_ok:
+            self.debug("read_page\ttimeout")
+            return None
+        # Data Read
+        data = self.nand.output_data(num_bytes=num_bytes)
+        # CS deassert
+        self.nand.set_ceb(None)
+        return data
 
     ########################################################
     # Application functions
@@ -215,8 +277,7 @@ class NandCommander:
     def check_num_active_cs(
         self,
         check_num_cs: int = 2,
-        # for JISC-SSD TC58NVG0S3HTA00
-        expect_id: bytearray = bytearray([0x98, 0xF1, 0x80, 0x15, 0x72]),
+        expect_id: bytearray = NandConfig.READ_ID_EXPECT,
     ) -> int:
         num_cs = 0
         for cs_index in range(check_num_cs):
@@ -245,6 +306,15 @@ def main() -> None:
     num_cs = nandcmd.check_num_active_cs()
     print(f"Number of active CS: {num_cs}")
     panic(num_cs == 0, "No NAND flash is found.")
+
+    block = 0
+    page = 0
+    col = 0
+    data = nandcmd.read_page(cs_index=0, block=block, page=page, col=col)
+    assert data is not None
+    print(f"Data: {data.hex()}")
+    print("Success!")
+    led.on()
 
 
 if __name__ == "__main__":
