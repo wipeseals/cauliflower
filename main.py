@@ -10,7 +10,11 @@ class NandCmd:
 
 
 class NandIo:
-    def __init__(self, delay_us: int = 1, is_debug: bool = True) -> None:
+    def __init__(
+        self,
+        delay_us: int = 1,
+        is_debug: bool = True,
+    ) -> None:
         self.is_debug = is_debug
         self.delay_us = delay_us
         self.io0 = Pin(0, Pin.OUT)
@@ -42,6 +46,9 @@ class NandIo:
         ]
         self.ceb = [self.ceb0, self.ceb1]
         self.setup_pin()
+
+    def seq_delay(self) -> None:
+        time.sleep_us(self.delay_us)
 
     def debug(self, msg: str) -> None:
         if self.is_debug:
@@ -120,6 +127,16 @@ class NandIo:
         self.set_web(1)
         self.set_reb(1)
 
+
+class NandCommander:
+    def __init__(self, nand: NandIo, is_debug: bool = True) -> None:
+        self.is_debug = is_debug
+        self.nand = nand
+
+    def debug(self, msg: str) -> None:
+        if self.is_debug:
+            print(msg)
+
     ########################################################
     # Communication functions
     ########################################################
@@ -133,78 +150,84 @@ class NandIo:
             bytearray: ID Readの結果
         """
         id = bytearray()
-        self.set_io_dir(is_output=True)
-        self.set_cle(0)
-        self.set_ale(0)
-        self.set_web(1)
-        self.set_reb(1)
+        self.nand.set_io_dir(is_output=True)
+        self.nand.set_cle(0)
+        self.nand.set_ale(0)
+        self.nand.set_web(1)
+        self.nand.set_reb(1)
 
         # CS select
-        self.set_ceb(cs_index=cs_index)
+        self.nand.set_ceb(cs_index=cs_index)
         # Command Input
-        self.set_io(NandCmd.READ_ID)
-        self.set_cle(1)
-        self.set_web(0)
-        time.sleep_us(self.delay_us)
-        self.set_web(1)
-        self.set_cle(0)
+        self.nand.set_io(NandCmd.READ_ID)
+        self.nand.set_cle(1)
+        self.nand.set_web(0)
+        self.nand.seq_delay()
+        self.nand.set_web(1)
+        self.nand.set_cle(0)
         # Address Input
-        self.set_io(0)
-        self.set_ale(1)
-        self.set_web(0)
-        time.sleep_us(self.delay_us)
-        self.set_web(1)
-        self.set_ale(0)
+        self.nand.set_io(0)
+        self.nand.set_ale(1)
+        self.nand.set_web(0)
+        self.nand.seq_delay()
+        self.nand.set_web(1)
+        self.nand.set_ale(0)
         # ID Read
-        self.set_io_dir(is_output=False)
-        time.sleep_us(self.delay_us)
+        self.nand.set_io_dir(is_output=False)
+        self.nand.seq_delay()
         for i in range(5):
-            self.set_reb(0)
-            time.sleep_us(self.delay_us)
-            id.append(self.get_io())
-            self.set_reb(1)
-            time.sleep_us(self.delay_us)
+            self.nand.set_reb(0)
+            self.nand.seq_delay()
+            id.append(self.nand.get_io())
+            self.nand.set_reb(1)
+            self.nand.seq_delay()
 
-        self.set_io_dir(is_output=True)
+        self.nand.set_io_dir(is_output=True)
         # CS deselect
-        self.set_ceb(None)
+        self.nand.set_ceb(None)
 
         return id
 
+    # def read_page(self, cs_index: int, addr:NandAddr) -> bytearray:
+    #     addr.
+
+    ########################################################
+    # Application functions
+    ########################################################
     def check_num_active_cs(
         self,
+        check_num_cs: int = 2,
         # for JISC-SSD TC58NVG0S3HTA00
         expect_id: bytearray = bytearray([0x98, 0xF1, 0x80, 0x15, 0x72]),
     ) -> int:
-        nand = NandIo()
-        nand.init_pin()
         num_cs = 0
-        for cs_index in range(2):
-            id = nand.read_id(cs_index=cs_index)
+        for cs_index in range(check_num_cs):
+            id = self.read_id(cs_index=cs_index)
             is_ok = id == expect_id
             self.debug(f"[CS{cs_index}]: ID:{id.hex()} {'OK' if is_ok else 'NG'}")
             if not is_ok:
                 return num_cs
             num_cs += 1
+        return num_cs
 
 
-def main() -> None:
-    # for JISC-SSD TC58NVG0S3HTA00
-    EXPECT_ID: bytearray = bytearray([0x98, 0xF1, 0x80, 0x15, 0x72])
-    nand = NandIo()
-    nand.init_pin()
-    num_cs = nand.check_num_active_cs(expect_id=EXPECT_ID)
-    print(f"Number of active CS: {num_cs}")
-    if num_cs == 0:
-        print("No NAND flash is found.")
+def panic(cond: bool, msg: str) -> None:
+    if cond:
+        print(msg)
         while True:
             led.off()
             time.sleep(0.5)
             led.on()
             time.sleep(0.5)
 
-    led.on()
-    time.sleep(1)
+
+def main() -> None:
+    is_debug = True
+    nandio = NandIo(is_debug=is_debug)
+    nandcmd = NandCommander(nand=nandio, is_debug=is_debug)
+    num_cs = nandcmd.check_num_active_cs()
+    print(f"Number of active CS: {num_cs}")
+    panic(num_cs == 0, "No NAND flash is found.")
 
 
 if __name__ == "__main__":
