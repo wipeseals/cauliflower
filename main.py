@@ -5,6 +5,16 @@ import rp2
 led = Pin("LED", Pin.OUT)
 
 
+def panic(cond: bool, msg: str) -> None:
+    if cond:
+        print(msg)
+        while True:
+            led.off()
+            time.sleep(0.5)
+            led.on()
+            time.sleep(0.5)
+
+
 class NandCmd:
     READ_1ST = 0x00
     READ_2ND = 0x30
@@ -328,11 +338,11 @@ class FlashTranslation:
     def __init__(
         self,
         nandcmd: NandCommander,
-        is_initial: bool = False,
-        # initialized values
-        num_cs: int | None = None,
-        initial_badblock_bitmaps: list[int | None] | None = None,
         is_debug: bool = True,
+        # initialized values
+        is_initial: bool = False,
+        num_cs: int | None = None,
+        initial_badblock_bitmaps: list[int] | None = None,
     ) -> None:
         self.nandcmd = nandcmd
         self.is_debug = is_debug
@@ -356,49 +366,52 @@ class FlashTranslation:
         # cs
         if self.num_cs is None:
             self.num_cs = self.nandcmd.check_num_active_cs()
+        panic(self.num_cs == 0, "No NAND Flash Found")
+        self.debug(f"init\tnum_cs={self.num_cs}")
         # badblock
         if self.badblock_bitmaps is None:
             self.badblock_bitmaps = []
         for cs_index in range(self.num_cs):
             # 片方のCSだけ初期値未設定ケースがあるので追加してからチェックした値をセット
             if len(self.badblock_bitmaps) < cs_index:
-                self.badblock_bitmaps.append(None)
-            if self.badblock_bitmaps[cs_index] is None:
-                self.badblock_bitmaps[cs_index] = self.nandcmd.check_badblocks(
-                    cs_index=cs_index
-                )
-                self.debug(
-                    f"create_badblock_bitmaps\tcs={cs_index}\tbitmap={self.badblock_bitmaps[cs_index]:08X}"
-                )
-
-
-def panic(cond: bool, msg: str) -> None:
-    if cond:
-        print(msg)
-        while True:
-            led.off()
-            time.sleep(0.5)
-            led.on()
-            time.sleep(0.5)
+                self.badblock_bitmaps.append(0)
+                bitmaps = self.nandcmd.check_badblocks(cs_index=cs_index)
+                if bitmaps is None:
+                    panic(True, "Bad Block Check Failed")
+                else:
+                    self.badblock_bitmaps[cs_index] = bitmaps
+        for cs_index in range(self.num_cs):
+            self.debug(
+                f"init\tbadblock\tcs={cs_index}\t{self.badblock_bitmaps[cs_index]:0x}"
+            )
+        # allocated bitmap
+        self.allocated_bitmaps = [0] * self.num_cs
+        # badblock部分は確保済としてマーク
+        for cs_index in range(self.num_cs):
+            self.allocated_bitmaps[cs_index] = self.badblock_bitmaps[cs_index]
+        for cs_index in range(self.num_cs):
+            self.debug(
+                f"init\tallocated\tcs={cs_index}\t{self.allocated_bitmaps[cs_index]:0x}"
+            )
 
 
 def main() -> None:
     # Erase operation前に実施する必要があるため、取得済の値があれば事前にセットしておく
     is_initial = True
     num_cs = 1
-    badblock_bitmaps: list[int | None] = [
+    badblock_bitmaps: list[int] = [
         0x1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
-        None,
+        # cs1=None
     ]
 
     nandio = NandIo(is_debug=False)
     nandcmd = NandCommander(nand=nandio, is_debug=True)
     ftl = FlashTranslation(
         nandcmd=nandcmd,
+        is_debug=True,
         is_initial=is_initial,
         num_cs=num_cs,
         initial_badblock_bitmaps=badblock_bitmaps,
-        is_debug=True,
     )
 
     led.on()
