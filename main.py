@@ -16,10 +16,20 @@ def panic(cond: bool, msg: str) -> None:
 
 
 class NandCmd:
+    READ_ID = 0x90
     READ_1ST = 0x00
     READ_2ND = 0x30
+    ERASE_1ST = 0x60
+    ERASE_2ND = 0xD0
+    STATUS_READ = 0x70
 
-    READ_ID = 0x90
+
+class NandStatus:
+    PROGRAM_ERASE_FAIL = 0x01
+    CACHE_PROGRAM_FAIL = 0x02
+    PAGE_BUFFER_READY = 0x20
+    DATA_CACHE_READY = 0x40
+    WRITE_PROTECT_DISABLE = 0x80
 
 
 class NandIo:
@@ -224,6 +234,20 @@ class NandConfig:
         addr.append((block >> 2) & 0xFF)
         return addr
 
+    @staticmethod
+    def create_block_addr(block: int) -> bytearray:
+        """Create NAND Flash Block Address
+
+        | cycle | Data      |
+        |-------|-----------|
+        | 0     | BLOCK[7:0]|
+        | 1     | BLOCK[15:8]|
+        """
+        addr = bytearray()
+        addr.append(block & 0xFF)
+        addr.append((block >> 8) & 0xFF)
+        return addr
+
 
 class NandCommander:
     def __init__(
@@ -271,7 +295,7 @@ class NandCommander:
         col: int = 0,
         num_bytes: int = NandConfig.PAGE_BYTES,
     ) -> bytearray | None:
-        addr = NandConfig.create_nand_addr(block=block, page=page, col=col)
+        page_addr = NandConfig.create_nand_addr(block=block, page=page, col=col)
         nand = self.nand
         # initialize
         nand.init_pin()
@@ -280,7 +304,7 @@ class NandCommander:
         # 1st Command Input
         nand.input_cmd(NandCmd.READ_1ST)
         # Address Input
-        nand.input_addrs(addr)
+        nand.input_addrs(page_addr)
         # 2nd Command Input
         nand.input_cmd(NandCmd.READ_2ND)
         # Wait Busy
@@ -293,6 +317,50 @@ class NandCommander:
         # CS deassert
         nand.set_ceb(None)
         return data
+
+    def read_status(self, cs_index: int) -> int:
+        nand = self.nand
+        # initialize
+        nand.init_pin()
+        # CS select
+        nand.set_ceb(cs_index=cs_index)
+        # Command Input
+        nand.input_cmd(NandCmd.STATUS_READ)
+        # Status Read
+        status = nand.output_data(num_bytes=1)
+        # CS deselect
+        nand.set_ceb(None)
+        return status[0]
+
+    def erase_block(self, cs_index: int, block: int) -> bool:
+        block_addr = NandConfig.create_block_addr(block=block)
+        nand = self.nand
+        # initialize
+        nand.init_pin()
+        # CS select
+        nand.set_ceb(cs_index=cs_index)
+        # 1st Command Input
+        nand.input_cmd(NandCmd.ERASE_1ST)
+        # Address Input
+        nand.input_addrs(block_addr)
+        # 2nd Command Input
+        nand.input_cmd(NandCmd.ERASE_2ND)
+        # Wait Busy
+        is_ok = nand.wait_busy(timeout_ms=self.timeout_ms)
+        if not is_ok:
+            self.debug("erase_block\ttimeout")
+            return False
+        # CS deassert
+        nand.set_ceb(None)
+
+        # status read (erase result)
+        status = self.read_status(cs_index=cs_index)
+        is_ok = (status & NandStatus.PROGRAM_ERASE_FAIL) == 0
+
+        self.debug(
+            f"erase_block\tcs={cs_index}\tblock={block}\tis_ok={is_ok}\tstatus={status:02X}"
+        )
+        return is_ok
 
     ########################################################
     # Application functions
@@ -339,13 +407,17 @@ class FlashTranslation:
         self,
         nandcmd: NandCommander,
         is_debug: bool = True,
+        keep_wp: bool = True,
         # initialized values
         is_initial: bool = False,
-        num_cs: int | None = None,
-        initial_badblock_bitmaps: list[int] | None = None,
+        num_cs: int = 0,
+        initial_badblock_bitmaps: list[int] = [],
     ) -> None:
         self.nandcmd = nandcmd
         self.is_debug = is_debug
+
+        if not keep_wp:
+            self.nandcmd.nand.set_wpb(0)
 
         if is_initial:
             self.num_cs = num_cs
@@ -357,14 +429,14 @@ class FlashTranslation:
 
     def debug(self, msg: str) -> None:
         if self.is_debug:
-            print(f"[DEBUG]\tFlashTranslation\t{msg}")
+            print(f"[DEBUG]\tFTL\t{msg}")
 
     ########################################################
     # Application functions
     ########################################################
     def init(self) -> None:
         # cs
-        if self.num_cs is None:
+        if self.num_cs == 0:
             self.num_cs = self.nandcmd.check_num_active_cs()
         panic(self.num_cs == 0, "No NAND Flash Found")
         self.debug(f"init\tnum_cs={self.num_cs}")
@@ -394,25 +466,83 @@ class FlashTranslation:
                 f"init\tallocated\tcs={cs_index}\t{self.allocated_bitmaps[cs_index]:0x}"
             )
 
+    def _select_freeblock(self) -> tuple[int | None, int | None]:
+        # 先頭から空きを探す
+        for cs_index in range(self.num_cs):
+            for block in range(NandConfig.BLOCKS_PER_CS):
+                if (self.allocated_bitmaps[cs_index] & (1 << block)) == 0:
+                    return cs_index, block
+        return None, None
+
+    def _allocate_block(self, cs_index: int, block: int) -> None:
+        panic(
+            (self.allocated_bitmaps[cs_index] & (1 << block)) != 0,
+            "Block Already Allocated",
+        )
+
+        self.allocated_bitmaps[cs_index] |= 1 << block
+        self.debug(
+            f"allocate_block\tcs={cs_index}\tblock={block}\t{self.allocated_bitmaps[cs_index]:0x}"
+        )
+
+    def _free_block(self, cs_index: int, block: int) -> None:
+        panic(
+            (self.allocated_bitmaps[cs_index] & (1 << block)) == 0,
+            "Block Already Freed",
+        )
+
+        self.allocated_bitmaps[cs_index] &= ~(1 << block)
+        self.debug(
+            f"free_block\tcs={cs_index}\tblock={block}\t{self.allocated_bitmaps[cs_index]:0x}"
+        )
+
+    def _mark_badblock(self, cs_index: int, block: int) -> None:
+        self.badblock_bitmaps[cs_index] |= 1 << block
+        self.debug(
+            f"mark_badblock\tcs={cs_index}\tblock={block}\t{self.badblock_bitmaps[cs_index]:0x}"
+        )
+
+    def alloc_block(self) -> int:
+        while True:
+            cs, block = self._select_freeblock()
+            if block is None or cs is None:
+                # 空きBlockなし、GC必要
+                panic(True, "No Free Block. TODO: impl GC")
+            else:
+                # Erase Block
+                is_erase_ok = self.nandcmd.erase_block(cs_index=cs, block=block)
+                if is_erase_ok:
+                    self._allocate_block(cs_index=cs, block=block)
+                    self.debug(f"alloc_block\tcs={cs}\tblock={block}")
+                    return block
+                else:
+                    # Erase失敗、BadBlockとしてマークし、Freeせず次のBlockを探す
+                    self._mark_badblock(cs_index=cs, block=block)
+                    self.debug(f"alloc_block\tcs={cs}\tblock={block}\tErase Failed")
+
 
 def main() -> None:
     # Erase operation前に実施する必要があるため、取得済の値があれば事前にセットしておく
     is_initial = True
+    keep_wp = False  # Write Protect解除して良いならFalse
     num_cs = 1
     badblock_bitmaps: list[int] = [
         0x1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
         # cs1=None
     ]
 
-    nandio = NandIo(is_debug=False)
+    nandio = NandIo(is_debug=True)
     nandcmd = NandCommander(nand=nandio, is_debug=True)
     ftl = FlashTranslation(
         nandcmd=nandcmd,
         is_debug=True,
+        keep_wp=keep_wp,
         is_initial=is_initial,
         num_cs=num_cs,
         initial_badblock_bitmaps=badblock_bitmaps,
     )
+    block = ftl.alloc_block()
+    print(f"Allocated Block: {block}")
 
     led.on()
 
