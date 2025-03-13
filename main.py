@@ -15,7 +15,7 @@ class NandCmd:
 class NandIo:
     def __init__(
         self,
-        delay_us: int = 1,
+        delay_us: int = 0,
         is_debug: bool = True,
     ) -> None:
         self.is_debug = is_debug
@@ -180,7 +180,10 @@ class NandIo:
 
 
 class NandConfig:
-    """NAND Flash Configuration for JISC-SSD TC58NVG0S3HTA00"""
+    """
+    NAND Flash Configuration for JISC-SSD TC58NVG0S3HTA00
+    note: 動作中に別NANDに切り替えることはないのでinstanceを巻いたりしない
+    """
 
     # JISC-SSD TC58NVG0S3HTA00 x 2
     MAX_CS = 2
@@ -188,6 +191,10 @@ class NandConfig:
     READ_ID_EXPECT = bytearray([0x98, 0xF1, 0x80, 0x15, 0x72])
     # 2048byte(main) + 128byte(redundancy or other uses)
     PAGE_BYTES = 2048 + 128
+    # number of pages per block
+    PAGES_PER_BLOCK = 64
+    # number of blocks per CS
+    BLOCKS_PER_CS = 1024
 
     @staticmethod
     def create_nand_addr(block: int, page: int, col: int) -> bytearray:
@@ -210,7 +217,10 @@ class NandConfig:
 
 class NandCommander:
     def __init__(
-        self, nand: NandIo, timeout_ms: int = 1000, is_debug: bool = True
+        self,
+        nand: NandIo,
+        timeout_ms: int = 1000,
+        is_debug: bool = True,
     ) -> None:
         self.is_debug = is_debug
         self.timeout_ms = timeout_ms
@@ -224,18 +234,20 @@ class NandCommander:
     # Communication functions
     ########################################################
     def read_id(self, cs_index: int, num_bytes: int = 5) -> bytearray:
+        nand = self.nand
+
         # initialize
-        self.nand.init_pin()
+        nand.init_pin()
         # CS select
-        self.nand.set_ceb(cs_index=cs_index)
+        nand.set_ceb(cs_index=cs_index)
         # Command Input
-        self.nand.input_cmd(NandCmd.READ_ID)
+        nand.input_cmd(NandCmd.READ_ID)
         # Address Input
-        self.nand.input_addr(0)
+        nand.input_addr(0)
         # ID Read
-        id = self.nand.output_data(num_bytes=num_bytes)
+        id = nand.output_data(num_bytes=num_bytes)
         # CS deselect
-        self.nand.set_ceb(None)
+        nand.set_ceb(None)
 
         self.debug(f"read_id\tcs={cs_index}\tid={id.hex()}")
 
@@ -250,25 +262,26 @@ class NandCommander:
         num_bytes: int = NandConfig.PAGE_BYTES,
     ) -> bytearray | None:
         addr = NandConfig.create_nand_addr(block=block, page=page, col=col)
+        nand = self.nand
         # initialize
-        self.nand.init_pin()
+        nand.init_pin()
         # CS select
-        self.nand.set_ceb(cs_index=cs_index)
+        nand.set_ceb(cs_index=cs_index)
         # 1st Command Input
-        self.nand.input_cmd(NandCmd.READ_1ST)
+        nand.input_cmd(NandCmd.READ_1ST)
         # Address Input
-        self.nand.input_addrs(addr)
+        nand.input_addrs(addr)
         # 2nd Command Input
-        self.nand.input_cmd(NandCmd.READ_2ND)
+        nand.input_cmd(NandCmd.READ_2ND)
         # Wait Busy
-        is_ok = self.nand.wait_busy(timeout_ms=self.timeout_ms)
+        is_ok = nand.wait_busy(timeout_ms=self.timeout_ms)
         if not is_ok:
             self.debug("read_page\ttimeout")
             return None
         # Data Read
-        data = self.nand.output_data(num_bytes=num_bytes)
+        data = nand.output_data(num_bytes=num_bytes)
         # CS deassert
-        self.nand.set_ceb(None)
+        nand.set_ceb(None)
         return data
 
     ########################################################
@@ -289,6 +302,27 @@ class NandCommander:
             num_cs += 1
         return num_cs
 
+    def check_badblocks(
+        self, cs_index: int, num_blocks: int = NandConfig.BLOCKS_PER_CS
+    ) -> int | None:
+        badblock_bitmap = 0
+        for block in range(num_blocks):
+            data = self.read_page(
+                cs_index=cs_index, block=block, page=0, col=0, num_bytes=1
+            )
+            # Read Exception
+            if data is None:
+                self.debug(f"check_badblocks\tcs={cs_index}\tblock={block}\tException")
+                return None
+            # Check Bad Block
+            is_bad = data[0] != 0xFF
+            if is_bad:
+                badblock_bitmap |= 1 << block
+            self.debug(
+                f"check_badblocks\tcs={cs_index}\tblock={block}\tis_bad={is_bad}"
+            )
+        return badblock_bitmap
+
 
 def panic(cond: bool, msg: str) -> None:
     if cond:
@@ -301,19 +335,16 @@ def panic(cond: bool, msg: str) -> None:
 
 
 def main() -> None:
-    nandio = NandIo(is_debug=True)
+    nandio = NandIo(is_debug=False)
     nandcmd = NandCommander(nand=nandio, is_debug=True)
     num_cs = nandcmd.check_num_active_cs()
     print(f"Number of active CS: {num_cs}")
     panic(num_cs == 0, "No NAND flash is found.")
 
-    block = 0
-    page = 0
-    col = 0
-    data = nandcmd.read_page(cs_index=0, block=block, page=page, col=col)
-    assert data is not None
-    print(f"Data: {data.hex()}")
-    print("Success!")
+    for cs_index in range(num_cs):
+        badblock_bitmap = nandcmd.check_badblocks(cs_index=cs_index)
+        print(f"[CS{cs_index}] Bad Block Bitmap: {badblock_bitmap:08X}")
+
     led.on()
 
 
