@@ -1,3 +1,5 @@
+import os
+import json
 from machine import Pin
 import time
 import rp2
@@ -402,7 +404,7 @@ class NandCommander:
         return badblock_bitmap
 
 
-class FlashTranslation:
+class NandBlockAllocator:
     def __init__(
         self,
         nandcmd: NandCommander,
@@ -419,17 +421,52 @@ class FlashTranslation:
         if not keep_wp:
             self.nandcmd.nand.set_wpb(0)
 
+        if not is_initial:
+            try:
+                self.load()
+            except OSError as e:
+                self.debug(f"load\terror={e}")
+                is_initial = True
+
         if is_initial:
+            self.debug("initialize")
             self.num_cs = num_cs
             self.badblock_bitmaps = initial_badblock_bitmaps
             self.init()
-        else:
-            # TODO: restore from flash
-            pass
+            # save initialized values
+            self.save()
 
     def debug(self, msg: str) -> None:
         if self.is_debug:
             print(f"[DEBUG]\tFTL\t{msg}")
+
+    def save(self, filepath: str = "nand_block_allocator.json") -> None:
+        json_str = json.dumps(
+            {
+                "num_cs": self.num_cs,
+                "badblock_bitmaps": self.badblock_bitmaps,
+                "allocated_bitmaps": self.allocated_bitmaps,
+            }
+        )
+        try:
+            f = open(filepath, "w")
+            f.write(json_str)
+            f.close()
+            self.debug(f"save\t{filepath}")
+        except OSError as e:
+            raise e
+
+    def load(self, filepath: str = "nand_block_allocator.json") -> None:
+        try:
+            f = open(filepath, "r")
+            data = json.loads(f.read())
+            self.num_cs = data["num_cs"]
+            self.badblock_bitmaps = data["badblock_bitmaps"]
+            self.allocated_bitmaps = data["allocated_bitmaps"]
+            f.close()
+            self.debug(f"load\t{filepath}")
+        except OSError as e:
+            raise e
 
     ########################################################
     # Application functions
@@ -466,15 +503,18 @@ class FlashTranslation:
                 f"init\tallocated\tcs={cs_index}\t{self.allocated_bitmaps[cs_index]:0x}"
             )
 
-    def _select_freeblock(self) -> tuple[int | None, int | None]:
+    def _pick_free(self) -> tuple[int | None, int | None]:
         # 先頭から空きを探す
         for cs_index in range(self.num_cs):
             for block in range(NandConfig.BLOCKS_PER_CS):
-                if (self.allocated_bitmaps[cs_index] & (1 << block)) == 0:
+                # free & not badblock
+                if (self.allocated_bitmaps[cs_index] & (1 << block)) == 0 and (
+                    self.badblock_bitmaps[cs_index] & (1 << block)
+                ) == 0:
                     return cs_index, block
         return None, None
 
-    def _allocate_block(self, cs_index: int, block: int) -> None:
+    def _mark_alloc(self, cs_index: int, block: int) -> None:
         panic(
             (self.allocated_bitmaps[cs_index] & (1 << block)) != 0,
             "Block Already Allocated",
@@ -485,10 +525,10 @@ class FlashTranslation:
             f"allocate_block\tcs={cs_index}\tblock={block}\t{self.allocated_bitmaps[cs_index]:0x}"
         )
 
-    def _free_block(self, cs_index: int, block: int) -> None:
+    def _mark_free(self, cs_index: int, block: int) -> None:
         panic(
             (self.allocated_bitmaps[cs_index] & (1 << block)) == 0,
-            "Block Already Freed",
+            "Block Already Free",
         )
 
         self.allocated_bitmaps[cs_index] &= ~(1 << block)
@@ -496,7 +536,7 @@ class FlashTranslation:
             f"free_block\tcs={cs_index}\tblock={block}\t{self.allocated_bitmaps[cs_index]:0x}"
         )
 
-    def _mark_badblock(self, cs_index: int, block: int) -> None:
+    def _mark_bad(self, cs_index: int, block: int) -> None:
         self.badblock_bitmaps[cs_index] |= 1 << block
         self.debug(
             f"mark_badblock\tcs={cs_index}\tblock={block}\t{self.badblock_bitmaps[cs_index]:0x}"
@@ -504,7 +544,7 @@ class FlashTranslation:
 
     def alloc_block(self) -> int:
         while True:
-            cs, block = self._select_freeblock()
+            cs, block = self._pick_free()
             if block is None or cs is None:
                 # 空きBlockなし、GC必要
                 panic(True, "No Free Block. TODO: impl GC")
@@ -512,36 +552,24 @@ class FlashTranslation:
                 # Erase Block
                 is_erase_ok = self.nandcmd.erase_block(cs_index=cs, block=block)
                 if is_erase_ok:
-                    self._allocate_block(cs_index=cs, block=block)
+                    self._mark_alloc(cs_index=cs, block=block)
                     self.debug(f"alloc_block\tcs={cs}\tblock={block}")
                     return block
                 else:
                     # Erase失敗、BadBlockとしてマークし、Freeせず次のBlockを探す
-                    self._mark_badblock(cs_index=cs, block=block)
+                    self._mark_bad(cs_index=cs, block=block)
                     self.debug(f"alloc_block\tcs={cs}\tblock={block}\tErase Failed")
 
 
 def main() -> None:
-    # Erase operation前に実施する必要があるため、取得済の値があれば事前にセットしておく
-    is_initial = True
-    keep_wp = False  # Write Protect解除して良いならFalse
-    num_cs = 1
-    badblock_bitmaps: list[int] = [
-        0x1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
-        # cs1=None
-    ]
-
     nandio = NandIo(is_debug=True)
     nandcmd = NandCommander(nand=nandio, is_debug=True)
-    ftl = FlashTranslation(
+    block_allocator = NandBlockAllocator(
         nandcmd=nandcmd,
         is_debug=True,
-        keep_wp=keep_wp,
-        is_initial=is_initial,
-        num_cs=num_cs,
-        initial_badblock_bitmaps=badblock_bitmaps,
+        keep_wp=False,
     )
-    block = ftl.alloc_block()
+    block = block_allocator.alloc_block()
     print(f"Allocated Block: {block}")
 
     led.on()
