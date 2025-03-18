@@ -24,6 +24,8 @@ class NandCmd:
     ERASE_1ST = 0x60
     ERASE_2ND = 0xD0
     STATUS_READ = 0x70
+    PROGRAM_1ST = 0x80
+    PROGRAM_2ND = 0x10
 
 
 class NandStatus:
@@ -364,6 +366,49 @@ class NandCommander:
         )
         return is_ok
 
+    def program_page(
+        self,
+        cs_index: int,
+        block: int,
+        page: int,
+        data: bytearray,
+        col: int = 0,
+    ) -> bool:
+        page_addr = NandConfig.create_nand_addr(block=block, page=page, col=col)
+        nand = self._nand
+        # initialize
+        nand.init_pin()
+        # CS select
+        nand.set_ceb(cs_index=cs_index)
+        # 1st Command Input
+        nand.input_cmd(NandCmd.PROGRAM_1ST)
+        # Address Input
+        nand.input_addrs(page_addr)
+        # Data Input
+        for i in range(len(data)):
+            nand.set_io(data[i])
+            nand.set_web(0)
+            nand.seq_delay()
+            nand.set_web(1)
+        # 2nd Command Input
+        nand.input_cmd(NandCmd.PROGRAM_2ND)
+        # Wait Busy
+        is_ok = nand.wait_busy(timeout_ms=self._timeout_ms)
+        if not is_ok:
+            self.debug(f"{self.program_page.__name__}\ttimeout")
+            return False
+        # CS deassert
+        nand.set_ceb(None)
+
+        # status read (program result)
+        status = self.read_status(cs_index=cs_index)
+        is_ok = (status & NandStatus.PROGRAM_ERASE_FAIL) == 0
+
+        self.debug(
+            f"{self.program_page.__name__}\tcs={cs_index}\tblock={block}\tpage={page}\tis_ok={is_ok}\tstatus={status:02X}"
+        )
+        return is_ok
+
     ########################################################
     # Application functions
     ########################################################
@@ -422,8 +467,7 @@ class NandBlockManager:
         self._nandcmd = nandcmd
         self._is_debug = is_debug
 
-        if not keep_wp:
-            self._nandcmd._nand.set_wpb(0)
+        self._nandcmd._nand.set_wpb(0 if keep_wp else 1)
 
         if not is_initial:
             try:
@@ -568,6 +612,22 @@ class NandBlockManager:
                         f"{self.alloc.__name__}\tcs={cs}\tblock={block}\tErase Failed"
                     )
 
+    def free(self, cs_index: int, block: int) -> None:
+        self.debug(f"{self.free.__name__}\tcs={cs_index}\tblock={block}")
+        self._mark_free(cs_index=cs_index, block=block)
+
+    def read(self, cs_index: int, block: int, page: int) -> bytearray | None:
+        self.debug(f"{self.read.__name__}\tcs={cs_index}\tblock={block}\tpage={page}")
+        return self._nandcmd.read_page(cs_index=cs_index, block=block, page=page)
+
+    def program(self, cs_index: int, block: int, page: int, data: bytearray) -> bool:
+        self.debug(
+            f"{self.program.__name__}\tcs={cs_index}\tblock={block}\tpage={page}"
+        )
+        return self._nandcmd.program_page(
+            cs_index=cs_index, block=block, page=page, data=data
+        )
+
 
 def main() -> None:
     nandio = NandIo(is_debug=True)
@@ -579,6 +639,19 @@ def main() -> None:
     )
     block = blockmng.alloc()
     print(f"Allocated Block: {block}")
+
+    read_data0 = blockmng.read(cs_index=0, block=block, page=0)
+    assert read_data0 is not None
+    print(f"Read Data: {read_data0.hex()}")
+
+    write_data = bytearray([x & 0xFF for x in range(NandConfig.PAGE_BYTES)])
+    is_ok = blockmng.program(cs_index=0, block=block, page=0, data=write_data)
+    print(f"Program Result: {is_ok}")
+
+    read_data1 = blockmng.read(cs_index=0, block=block, page=0)
+    assert read_data1 is not None
+    print(f"Read Data: {read_data1.hex()}")
+    print(f"Data Match: {read_data1 == write_data}")
 
     led.on()
 
