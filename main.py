@@ -40,43 +40,43 @@ class NandIo:
         delay_us: int = 0,
         is_debug: bool = True,
     ) -> None:
-        self.is_debug = is_debug
-        self.delay_us = delay_us
-        self.io0 = Pin(0, Pin.OUT)
-        self.io1 = Pin(1, Pin.OUT)
-        self.io2 = Pin(2, Pin.OUT)
-        self.io3 = Pin(3, Pin.OUT)
-        self.io4 = Pin(4, Pin.OUT)
-        self.io5 = Pin(5, Pin.OUT)
-        self.io6 = Pin(6, Pin.OUT)
-        self.io7 = Pin(7, Pin.OUT)
-        self.ceb0 = Pin(8, Pin.OUT)
-        self.ceb1 = Pin(9, Pin.OUT)
-        self.cle = Pin(10, Pin.OUT)
-        self.ale = Pin(11, Pin.OUT)
-        self.wpb = Pin(12, Pin.OUT)
-        self.web = Pin(13, Pin.OUT)
-        self.reb = Pin(14, Pin.OUT)
-        self.rbb = Pin(15, Pin.IN, Pin.PULL_UP)
+        self._is_debug = is_debug
+        self._delay_us = delay_us
+        self._io0 = Pin(0, Pin.OUT)
+        self._io1 = Pin(1, Pin.OUT)
+        self._io2 = Pin(2, Pin.OUT)
+        self._io3 = Pin(3, Pin.OUT)
+        self._io4 = Pin(4, Pin.OUT)
+        self._io5 = Pin(5, Pin.OUT)
+        self._io6 = Pin(6, Pin.OUT)
+        self._io7 = Pin(7, Pin.OUT)
+        self._ceb0 = Pin(8, Pin.OUT)
+        self._ceb1 = Pin(9, Pin.OUT)
+        self._cle = Pin(10, Pin.OUT)
+        self._ale = Pin(11, Pin.OUT)
+        self._wpb = Pin(12, Pin.OUT)
+        self._web = Pin(13, Pin.OUT)
+        self._reb = Pin(14, Pin.OUT)
+        self._rbb = Pin(15, Pin.IN, Pin.PULL_UP)
 
-        self.io = [
-            self.io0,
-            self.io1,
-            self.io2,
-            self.io3,
-            self.io4,
-            self.io5,
-            self.io6,
-            self.io7,
+        self._io = [
+            self._io0,
+            self._io1,
+            self._io2,
+            self._io3,
+            self._io4,
+            self._io5,
+            self._io6,
+            self._io7,
         ]
-        self.ceb = [self.ceb0, self.ceb1]
+        self._ceb = [self._ceb0, self._ceb1]
         self.setup_pin()
 
     def seq_delay(self) -> None:
-        time.sleep_us(self.delay_us)
+        time.sleep_us(self._delay_us)
 
     def debug(self, msg: str) -> None:
-        if self.is_debug:
+        if self._is_debug:
             print(f"[DEBUG]\tNandIo\t{msg}")
 
     ########################################################
@@ -85,69 +85,69 @@ class NandIo:
 
     def set_io(self, value: int) -> None:
         for i in range(8):
-            self.io[i].value((value >> i) & 0x1)
+            self._io[i].value((value >> i) & 0x1)
 
     def get_io(self) -> int:
         value = 0
         for i in range(8):
-            value |= self.io[i].value() << i
+            value |= self._io[i].value() << i
         return value
 
     def set_io_dir(self, is_output: bool) -> None:
         self.debug(f"IO\t{'OUT' if is_output else 'IN'}")
-        for pin in self.io:
+        for pin in self._io:
             pin.init(Pin.OUT if is_output else Pin.IN)
 
     def set_ceb(self, cs_index: int | None) -> None:
         assert cs_index is None or cs_index in [0, 1]
         if cs_index is None:
             self.debug("CS\tNone")
-            self.ceb0.on()
-            self.ceb1.on()
+            self._ceb0.on()
+            self._ceb1.on()
         else:
             self.debug(f"CS\t{cs_index}")
-            self.ceb0.value(0 if cs_index == 0 else 1)
-            self.ceb1.value(0 if cs_index == 1 else 1)
+            self._ceb0.value(0 if cs_index == 0 else 1)
+            self._ceb1.value(0 if cs_index == 1 else 1)
 
     def set_cle(self, value: int) -> None:
-        self.cle.value(value)
+        self._cle.value(value)
 
     def set_ale(self, value: int) -> None:
-        self.ale.value(value)
+        self._ale.value(value)
 
     def set_web(self, value: int) -> None:
-        self.web.value(value)
+        self._web.value(value)
 
     def set_wpb(self, value: int) -> None:
-        self.wpb.value(value)
+        self._wpb.value(value)
         self.debug(f"WPB\t{value}")
         time.sleep_us(100)
 
     def set_reb(self, value: int) -> None:
-        self.reb.value(value)
+        self._reb.value(value)
 
     def setup_pin(self) -> None:
         self.debug("SETUP")
-        for pin in self.io:
+        for pin in self._io:
             pin.init(Pin.OUT)
             pin.off()
-        for pin in self.ceb:
+        for pin in self._ceb:
             pin.init(Pin.OUT)
             pin.on()
-        self.cle.init(Pin.OUT)
-        self.cle.off()
-        self.ale.init(Pin.OUT)
-        self.ale.off()
-        self.wpb.init(Pin.OUT)
-        self.wpb.on()
-        self.web.init(Pin.OUT)
-        self.web.on()
-        self.reb.init(Pin.OUT)
-        self.reb.on()
-        self.rbb.init(Pin.IN, Pin.PULL_UP)
+        self._cle.init(Pin.OUT)
+        self._cle.off()
+        self._ale.init(Pin.OUT)
+        self._ale.off()
+        self._wpb.init(Pin.OUT)
+        self._wpb.on()
+        self._web.init(Pin.OUT)
+        self._web.on()
+        self._reb.init(Pin.OUT)
+        self._reb.on()
+        self._rbb.init(Pin.IN, Pin.PULL_UP)
 
     def get_rbb(self) -> int:
-        return self.rbb.value()
+        return self._rbb.value()
 
     def init_pin(self) -> None:
         self.debug("INIT")
@@ -258,19 +258,19 @@ class NandCommander:
         timeout_ms: int = 1000,
         is_debug: bool = True,
     ) -> None:
-        self.is_debug = is_debug
-        self.timeout_ms = timeout_ms
-        self.nand = nand
+        self._is_debug = is_debug
+        self._timeout_ms = timeout_ms
+        self._nand = nand
 
     def debug(self, msg: str) -> None:
-        if self.is_debug:
+        if self._is_debug:
             print(f"[DEBUG]\tNandCmd\t{msg}")
 
     ########################################################
     # Communication functions
     ########################################################
     def read_id(self, cs_index: int, num_bytes: int = 5) -> bytearray:
-        nand = self.nand
+        nand = self._nand
 
         # initialize
         nand.init_pin()
@@ -298,7 +298,7 @@ class NandCommander:
         num_bytes: int = NandConfig.PAGE_BYTES,
     ) -> bytearray | None:
         page_addr = NandConfig.create_nand_addr(block=block, page=page, col=col)
-        nand = self.nand
+        nand = self._nand
         # initialize
         nand.init_pin()
         # CS select
@@ -310,7 +310,7 @@ class NandCommander:
         # 2nd Command Input
         nand.input_cmd(NandCmd.READ_2ND)
         # Wait Busy
-        is_ok = nand.wait_busy(timeout_ms=self.timeout_ms)
+        is_ok = nand.wait_busy(timeout_ms=self._timeout_ms)
         if not is_ok:
             self.debug("read_page\ttimeout")
             return None
@@ -321,7 +321,7 @@ class NandCommander:
         return data
 
     def read_status(self, cs_index: int) -> int:
-        nand = self.nand
+        nand = self._nand
         # initialize
         nand.init_pin()
         # CS select
@@ -336,7 +336,7 @@ class NandCommander:
 
     def erase_block(self, cs_index: int, block: int) -> bool:
         block_addr = NandConfig.create_block_addr(block=block)
-        nand = self.nand
+        nand = self._nand
         # initialize
         nand.init_pin()
         # CS select
@@ -348,7 +348,7 @@ class NandCommander:
         # 2nd Command Input
         nand.input_cmd(NandCmd.ERASE_2ND)
         # Wait Busy
-        is_ok = nand.wait_busy(timeout_ms=self.timeout_ms)
+        is_ok = nand.wait_busy(timeout_ms=self._timeout_ms)
         if not is_ok:
             self.debug("erase_block\ttimeout")
             return False
@@ -404,7 +404,7 @@ class NandCommander:
         return badblock_bitmap
 
 
-class NandBlockAllocator:
+class NandBlockManager:
     def __init__(
         self,
         nandcmd: NandCommander,
@@ -415,11 +415,11 @@ class NandBlockAllocator:
         num_cs: int = 0,
         initial_badblock_bitmaps: list[int] = [],
     ) -> None:
-        self.nandcmd = nandcmd
-        self.is_debug = is_debug
+        self._nandcmd = nandcmd
+        self._is_debug = is_debug
 
         if not keep_wp:
-            self.nandcmd.nand.set_wpb(0)
+            self._nandcmd._nand.set_wpb(0)
 
         if not is_initial:
             try:
@@ -437,7 +437,7 @@ class NandBlockAllocator:
             self.save()
 
     def debug(self, msg: str) -> None:
-        if self.is_debug:
+        if self._is_debug:
             print(f"[DEBUG]\tFTL\t{msg}")
 
     def save(self, filepath: str = "nand_block_allocator.json") -> None:
@@ -452,19 +452,20 @@ class NandBlockAllocator:
             f = open(filepath, "w")
             f.write(json_str)
             f.close()
-            self.debug(f"save\t{filepath}")
+            self.debug(f"save\t{filepath}\t{json_str}")
         except OSError as e:
             raise e
 
     def load(self, filepath: str = "nand_block_allocator.json") -> None:
         try:
             f = open(filepath, "r")
-            data = json.loads(f.read())
+            json_text = f.read()
+            data = json.loads(json_text)
             self.num_cs = data["num_cs"]
             self.badblock_bitmaps = data["badblock_bitmaps"]
             self.allocated_bitmaps = data["allocated_bitmaps"]
             f.close()
-            self.debug(f"load\t{filepath}")
+            self.debug(f"load\t{filepath}\t{json_text}")
         except OSError as e:
             raise e
 
@@ -474,7 +475,7 @@ class NandBlockAllocator:
     def init(self) -> None:
         # cs
         if self.num_cs == 0:
-            self.num_cs = self.nandcmd.check_num_active_cs()
+            self.num_cs = self._nandcmd.check_num_active_cs()
         panic(self.num_cs == 0, "No NAND Flash Found")
         self.debug(f"init\tnum_cs={self.num_cs}")
         # badblock
@@ -484,7 +485,7 @@ class NandBlockAllocator:
             # 片方のCSだけ初期値未設定ケースがあるので追加してからチェックした値をセット
             if len(self.badblock_bitmaps) < cs_index:
                 self.badblock_bitmaps.append(0)
-                bitmaps = self.nandcmd.check_badblocks(cs_index=cs_index)
+                bitmaps = self._nandcmd.check_badblocks(cs_index=cs_index)
                 if bitmaps is None:
                     panic(True, "Bad Block Check Failed")
                 else:
@@ -550,7 +551,7 @@ class NandBlockAllocator:
                 panic(True, "No Free Block. TODO: impl GC")
             else:
                 # Erase Block
-                is_erase_ok = self.nandcmd.erase_block(cs_index=cs, block=block)
+                is_erase_ok = self._nandcmd.erase_block(cs_index=cs, block=block)
                 if is_erase_ok:
                     self._mark_alloc(cs_index=cs, block=block)
                     self.debug(f"alloc_block\tcs={cs}\tblock={block}")
@@ -564,12 +565,12 @@ class NandBlockAllocator:
 def main() -> None:
     nandio = NandIo(is_debug=True)
     nandcmd = NandCommander(nand=nandio, is_debug=True)
-    block_allocator = NandBlockAllocator(
+    blockmng = NandBlockManager(
         nandcmd=nandcmd,
         is_debug=True,
         keep_wp=False,
     )
-    block = block_allocator.alloc_block()
+    block = blockmng.alloc_block()
     print(f"Allocated Block: {block}")
 
     led.on()
