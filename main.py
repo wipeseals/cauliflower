@@ -285,7 +285,7 @@ class NandCommander:
         # CS deselect
         nand.set_ceb(None)
 
-        self.debug(f"read_id\tcs={cs_index}\tid={id.hex()}")
+        self.debug(f"{self.read_id.__name__}\tcs={cs_index}\tid={id.hex()}")
 
         return id
 
@@ -312,7 +312,7 @@ class NandCommander:
         # Wait Busy
         is_ok = nand.wait_busy(timeout_ms=self._timeout_ms)
         if not is_ok:
-            self.debug("read_page\ttimeout")
+            self.debug(f"{self.read_page.__name__}\ttimeout")
             return None
         # Data Read
         data = nand.output_data(num_bytes=num_bytes)
@@ -350,7 +350,7 @@ class NandCommander:
         # Wait Busy
         is_ok = nand.wait_busy(timeout_ms=self._timeout_ms)
         if not is_ok:
-            self.debug("erase_block\ttimeout")
+            self.debug(f"{self.erase_block.__name__}\ttimeout")
             return False
         # CS deassert
         nand.set_ceb(None)
@@ -360,7 +360,7 @@ class NandCommander:
         is_ok = (status & NandStatus.PROGRAM_ERASE_FAIL) == 0
 
         self.debug(
-            f"erase_block\tcs={cs_index}\tblock={block}\tis_ok={is_ok}\tstatus={status:02X}"
+            f"{self.erase_block.__name__}\tcs={cs_index}\tblock={block}\tis_ok={is_ok}\tstatus={status:02X}"
         )
         return is_ok
 
@@ -376,7 +376,9 @@ class NandCommander:
         for cs_index in range(check_num_cs):
             id = self.read_id(cs_index=cs_index)
             is_ok = id == expect_id
-            self.debug(f"check_num_active_cs\tcs={cs_index}\tis_ok={is_ok}")
+            self.debug(
+                f"{self.check_num_active_cs.__name__}\tcs={cs_index}\tis_ok={is_ok}"
+            )
             if not is_ok:
                 return num_cs
             num_cs += 1
@@ -392,14 +394,16 @@ class NandCommander:
             )
             # Read Exception
             if data is None:
-                self.debug(f"check_badblocks\tcs={cs_index}\tblock={block}\tException")
+                self.debug(
+                    f"{self.check_badblocks.__name__}\tcs={cs_index}\tblock={block}\tException"
+                )
                 return None
             # Check Bad Block
             is_bad = data[0] != 0xFF
             if is_bad:
                 badblock_bitmap |= 1 << block
             self.debug(
-                f"check_badblocks\tcs={cs_index}\tblock={block}\tis_bad={is_bad}"
+                f"{self.check_badblocks.__name__}\tcs={cs_index}\tblock={block}\tis_bad={is_bad}"
             )
         return badblock_bitmap
 
@@ -424,12 +428,13 @@ class NandBlockManager:
         if not is_initial:
             try:
                 self.load()
+                self.debug(f"{self.__init__.__name__}\tload")
             except OSError as e:
-                self.debug(f"load\terror={e}")
+                self.debug(f"{self.__init__.__name__}\tload error={e}")
                 is_initial = True
 
         if is_initial:
-            self.debug("initialize")
+            self.debug(f"{self.__init__.__name__}\tinitialize")
             self.num_cs = num_cs
             self.badblock_bitmaps = initial_badblock_bitmaps
             self.init()
@@ -438,7 +443,7 @@ class NandBlockManager:
 
     def debug(self, msg: str) -> None:
         if self._is_debug:
-            print(f"[DEBUG]\tFTL\t{msg}")
+            print(f"[DEBUG]\tBlockMng\t{msg}")
 
     def save(self, filepath: str = "nand_block_allocator.json") -> None:
         json_str = json.dumps(
@@ -452,7 +457,7 @@ class NandBlockManager:
             f = open(filepath, "w")
             f.write(json_str)
             f.close()
-            self.debug(f"save\t{filepath}\t{json_str}")
+            self.debug(f"{self.save.__name__}\t{filepath}\t{json_str}")
         except OSError as e:
             raise e
 
@@ -465,7 +470,7 @@ class NandBlockManager:
             self.badblock_bitmaps = data["badblock_bitmaps"]
             self.allocated_bitmaps = data["allocated_bitmaps"]
             f.close()
-            self.debug(f"load\t{filepath}\t{json_text}")
+            self.debug(f"{self.load.__name__}\t{filepath}\t{json_text}")
         except OSError as e:
             raise e
 
@@ -477,7 +482,7 @@ class NandBlockManager:
         if self.num_cs == 0:
             self.num_cs = self._nandcmd.check_num_active_cs()
         panic(self.num_cs == 0, "No NAND Flash Found")
-        self.debug(f"init\tnum_cs={self.num_cs}")
+        self.debug(f"{self.init.__name__}\tnum_cs={self.num_cs}")
         # badblock
         if self.badblock_bitmaps is None:
             self.badblock_bitmaps = []
@@ -492,7 +497,7 @@ class NandBlockManager:
                     self.badblock_bitmaps[cs_index] = bitmaps
         for cs_index in range(self.num_cs):
             self.debug(
-                f"init\tbadblock\tcs={cs_index}\t{self.badblock_bitmaps[cs_index]:0x}"
+                f"{self.init.__name__}\tbadblock\tcs={cs_index}\t{self.badblock_bitmaps[cs_index]:0x}"
             )
         # allocated bitmap
         self.allocated_bitmaps = [0] * self.num_cs
@@ -501,7 +506,7 @@ class NandBlockManager:
             self.allocated_bitmaps[cs_index] = self.badblock_bitmaps[cs_index]
         for cs_index in range(self.num_cs):
             self.debug(
-                f"init\tallocated\tcs={cs_index}\t{self.allocated_bitmaps[cs_index]:0x}"
+                f"{self.init.__name__}\tallocated\tcs={cs_index}\t{self.allocated_bitmaps[cs_index]:0x}"
             )
 
     def _pick_free(self) -> tuple[int | None, int | None]:
@@ -523,7 +528,7 @@ class NandBlockManager:
 
         self.allocated_bitmaps[cs_index] |= 1 << block
         self.debug(
-            f"allocate_block\tcs={cs_index}\tblock={block}\t{self.allocated_bitmaps[cs_index]:0x}"
+            f"{self._mark_alloc.__name__}\tcs={cs_index}\tblock={block}\t{self.allocated_bitmaps[cs_index]:0x}"
         )
 
     def _mark_free(self, cs_index: int, block: int) -> None:
@@ -534,16 +539,16 @@ class NandBlockManager:
 
         self.allocated_bitmaps[cs_index] &= ~(1 << block)
         self.debug(
-            f"free_block\tcs={cs_index}\tblock={block}\t{self.allocated_bitmaps[cs_index]:0x}"
+            f"{self._mark_free.__name__}\tcs={cs_index}\tblock={block}\t{self.allocated_bitmaps[cs_index]:0x}"
         )
 
     def _mark_bad(self, cs_index: int, block: int) -> None:
         self.badblock_bitmaps[cs_index] |= 1 << block
         self.debug(
-            f"mark_badblock\tcs={cs_index}\tblock={block}\t{self.badblock_bitmaps[cs_index]:0x}"
+            f"{self._mark_bad.__name__}\tcs={cs_index}\tblock={block}\t{self.badblock_bitmaps[cs_index]:0x}"
         )
 
-    def alloc_block(self) -> int:
+    def alloc(self) -> int:
         while True:
             cs, block = self._pick_free()
             if block is None or cs is None:
@@ -554,12 +559,14 @@ class NandBlockManager:
                 is_erase_ok = self._nandcmd.erase_block(cs_index=cs, block=block)
                 if is_erase_ok:
                     self._mark_alloc(cs_index=cs, block=block)
-                    self.debug(f"alloc_block\tcs={cs}\tblock={block}")
+                    self.debug(f"{self.alloc.__name__}\tcs={cs}\tblock={block}")
                     return block
                 else:
                     # Erase失敗、BadBlockとしてマークし、Freeせず次のBlockを探す
                     self._mark_bad(cs_index=cs, block=block)
-                    self.debug(f"alloc_block\tcs={cs}\tblock={block}\tErase Failed")
+                    self.debug(
+                        f"{self.alloc.__name__}\tcs={cs}\tblock={block}\tErase Failed"
+                    )
 
 
 def main() -> None:
@@ -570,7 +577,7 @@ def main() -> None:
         is_debug=True,
         keep_wp=False,
     )
-    block = blockmng.alloc_block()
+    block = blockmng.alloc()
     print(f"Allocated Block: {block}")
 
     led.on()
