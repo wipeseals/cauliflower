@@ -8,7 +8,54 @@ TODO:
 
 ## Getting Started
 
-TODO:
+### JISC-SSD 上で実行する
+
+- MicroPython のインストール
+  - Raspberry Pi Pico の公式サイトから、RP2040 用の MicroPython Runtime の UF2 File をダウンロードし書き込み
+    - 詳細は [MicroPython - Raspberry Pi](https://www.raspberrypi.com/documentation/microcontrollers/micropython.html) を参照。
+- Cauliflower を実行
+  - Cauliflower のリポジトリをクローン
+  - `main.py` を Raspberry Pi Pico 上に転送もしくはそのまま実行
+    - vscode + [MicroPico Extension](https://marketplace.visualstudio.com/items?itemName=paulober.pico-w-go): `MicroPico: Run Current file on Pico`
+    - Thonny: `Run -> Run current script`
+    - mpremote: `mpremote run main.py`
+
+### Linux/Windows 上で実行する
+
+MicroPython の Windows/Linux 向けポートを用いれば、そのまま実行することができます。
+NAND Flash への Read/Erase/Program 操作は、 `nand_datas/*.bin` のファイル操作に置き換えられます。
+
+```bash
+$ micropython main.py
+[DEBUG]Use Linux Driver
+[ERROR]Failed to create directory: nand_datas
+[TRACE]BLKMNG   load    nand_block_allocator.json       {"num_cs": 1, "badblock_bitmaps": [0], "allocated_bitmaps": [0]}
+[TRACE]BLKMNG   __init__        load
+[TRACE]CMD      erase_block     cs=0    block=0 is_ok=True
+[TRACE]BLKMNG   _mark_alloc     cs=0    block=0 1
+...
+```
+
+### Nix 環境/NixOs 上で実行
+
+nix, flakes, direnv を利用している場合、以下のコマンドで実行することができます。
+
+```bash
+$ direnv allow # 初回のみ
+direnv: loading /mnt/e/repos/cauliflower/.envrc
+direnv: using flake
+direnv: nix-direnv: Using cached dev shell
+direnv: export +CONFIG_SHELL +DETERMINISTIC_BUILD +HOST_PAT...
+
+$ micropython main.py
+[DEBUG]Use Linux Driver
+[ERROR]Failed to create directory: nand_datas
+[TRACE]BLKMNG   load    nand_block_allocator.json       {"num_cs": 1, "badblock_bitmaps": [0], "allocated_bitmaps": [0]}
+[TRACE]BLKMNG   __init__        load
+[TRACE]CMD      erase_block     cs=0    block=0 is_ok=True
+[TRACE]BLKMNG   _mark_alloc     cs=0    block=0 1
+...
+```
 
 ### Structure
 
