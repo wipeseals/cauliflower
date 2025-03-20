@@ -8,7 +8,7 @@ TODO:
 
 ## Getting Started
 
-### JISC-SSD 上で実行する
+### RPi Pico ([JISC-SSD](https://crane-elec.co.jp/products/vol-28/)) 上で実行する
 
 - MicroPython のインストール
   - Raspberry Pi Pico の公式サイトから、RP2040 用の MicroPython Runtime の UF2 File をダウンロードし書き込み
@@ -19,6 +19,14 @@ TODO:
     - vscode + [MicroPico Extension](https://marketplace.visualstudio.com/items?itemName=paulober.pico-w-go): `MicroPico: Run Current file on Pico`
     - Thonny: `Run -> Run current script`
     - mpremote: `mpremote run main.py`
+
+```bash
+[DEBUG]Use RP2040 Driver
+[TRACE]IO       SETUP
+[TRACE]IO       WPB     1
+[INFO]IO        WPB     Write Protect Disable
+[TRACE]BLKMNG   load    nand_block_allocator.json       {"num_cs": 1, "allocated_bitma ...
+```
 
 ### Linux/Windows 上で実行する
 
