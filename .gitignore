@@ -1,3 +1,7 @@
+# micropython on unix port
+nand_datas/
+*.json
+
 # nix/direnv
 .direnv
 

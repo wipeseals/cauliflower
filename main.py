@@ -143,8 +143,122 @@ class NandConfig:
 if sys.platform == "linux":
     # micropython on WSL or Linux
     # ABC classやdataclassなどを使いたいところだが、micropythonなのでifdef相当で振る舞い差し替え
-    # TODO:
-    pass
+    import os
+
+    class NandIo:
+        def __init__(self, keep_wp: bool = True) -> None:
+            # VCD traceしたくなった場合は実装
+            pass
+
+    class NandCommander:
+        def __init__(
+            self,
+            nandio: NandIo,
+            support_cs: int = 1,
+            base_dir: str = "nand_datas",
+        ) -> None:
+            self._nandio = nandio
+            self._support_cs = support_cs
+            self._base_dir = base_dir
+
+            # os.pathが無いのでとりあえず試す
+            try:
+                os.mkdir(base_dir)
+            except OSError:
+                error(f"Failed to create directory: {base_dir}")
+            # stat取れないケースは失敗
+            try:
+                os.stat(base_dir)
+            except OSError as e:
+                error(f"Failed to stat directory: {base_dir} error={e}")
+                raise e
+
+        def _data_path(self, cs_index: int, block: int, page: int) -> str:
+            # check range
+            if cs_index >= self._support_cs:
+                raise ValueError(
+                    f"Invalid CS Index: {cs_index} (support={self._support_cs})"
+                )
+            if block >= NandConfig.BLOCKS_PER_CS:
+                raise ValueError(
+                    f"Invalid Block: {block} (max={NandConfig.BLOCKS_PER_CS})"
+                )
+            if page >= NandConfig.PAGES_PER_BLOCK:
+                raise ValueError(
+                    f"Invalid Page: {page} (max={NandConfig.PAGES_PER_BLOCK})"
+                )
+
+            return (
+                f"{self._base_dir}/cs{cs_index:02d}_block{block:04d}_page{page:02d}.bin"
+            )
+
+        def _read_data(self, cs_index: int, block: int, page: int) -> bytearray | None:
+            path = self._data_path(cs_index=cs_index, block=block, page=page)
+            try:
+                with open(path, "rb") as f:
+                    return bytearray(f.read())
+            except OSError as e:
+                error(f"Failed to read file: {path} error={e}")
+                return bytearray([0xFF] * NandConfig.PAGE_BYTES)
+
+        def _write_data(
+            self, cs_index: int, block: int, page: int, data: bytearray
+        ) -> None:
+            path = self._data_path(cs_index=cs_index, block=block, page=page)
+            try:
+                with open(path, "wb") as f:
+                    f.write(data)
+            except OSError as e:
+                error(f"Failed to write file: {path} error={e}")
+
+        ########################################################
+        # Communication functions
+        ########################################################
+        def read_id(self, cs_index: int, num_bytes: int = 5) -> bytearray:
+            if cs_index < self._support_cs:
+                return NandConfig.READ_ID_EXPECT
+            else:
+                return bytearray([0x00] * num_bytes)
+
+        def read_page(
+            self,
+            cs_index: int,
+            block: int,
+            page: int,
+            col: int = 0,
+            num_bytes: int = NandConfig.PAGE_BYTES,
+        ) -> bytearray | None:
+            data = self._read_data(cs_index=cs_index, block=block, page=page)
+            return data
+
+        def read_status(self, cs_index: int) -> int:
+            return 0x00
+
+        def erase_block(self, cs_index: int, block: int) -> bool:
+            self._write_data(
+                cs_index=cs_index,
+                block=block,
+                page=0,
+                data=bytearray([0xFF] * NandConfig.PAGE_BYTES),
+            )
+            trace(
+                f"CMD\t{self.erase_block.__name__}\tcs={cs_index}\tblock={block}\tis_ok=True"
+            )
+            return True
+
+        def program_page(
+            self,
+            cs_index: int,
+            block: int,
+            page: int,
+            data: bytearray,
+            col: int = 0,
+        ) -> bool:
+            self._write_data(cs_index=cs_index, block=block, page=page, data=data)
+            trace(
+                f"CMD\t{self.program_page.__name__}\tcs={cs_index}\tblock={block}\tpage={page}\tis_ok=True"
+            )
+            return True
 else:
     # 現時点ではJISC-SSD (rp2040) のみを想定
     from machine import Pin
@@ -154,8 +268,10 @@ else:
         def __init__(
             self,
             delay_us: int = 0,
+            keep_wp: bool = True,
         ) -> None:
             self._delay_us = delay_us
+            self._keep_wp = keep_wp
             self._io0 = Pin(0, Pin.OUT)
             self._io1 = Pin(1, Pin.OUT)
             self._io2 = Pin(2, Pin.OUT)
@@ -186,7 +302,6 @@ else:
             self._ceb = [self._ceb0, self._ceb1]
             # debug indicator
             self._led = Pin("LED", Pin.OUT, value=1)
-
             self.setup_pin()
 
         def seq_delay(self) -> None:
@@ -255,7 +370,12 @@ else:
             self._ale.init(Pin.OUT)
             self._ale.off()
             self._wpb.init(Pin.OUT)
-            self._wpb.on()
+            if self._keep_wp:
+                self.set_wpb(0)
+                info("IO\tWPB\tWrite Protect Enable")
+            else:
+                self.set_wpb(1)
+                info("IO\tWPB\tWrite Protect Disable")
             self._web.init(Pin.OUT)
             self._web.on()
             self._reb.init(Pin.OUT)
@@ -466,62 +586,22 @@ else:
             )
             return is_ok
 
-        ########################################################
-        # Application functions
-        ########################################################
-        def check_num_active_cs(
-            self,
-            check_num_cs: int = 2,
-            expect_id: bytearray = NandConfig.READ_ID_EXPECT,
-        ) -> int:
-            num_cs = 0
-            for cs_index in range(check_num_cs):
-                id = self.read_id(cs_index=cs_index)
-                is_ok = id == expect_id
-                trace(
-                    f"CMD\t{self.check_num_active_cs.__name__}\tcs={cs_index}\tis_ok={is_ok}"
-                )
-                if not is_ok:
-                    return num_cs
-                num_cs += 1
-            return num_cs
-
-        def check_badblocks(
-            self, cs_index: int, num_blocks: int = NandConfig.BLOCKS_PER_CS
-        ) -> int | None:
-            badblock_bitmap = 0
-            for block in range(num_blocks):
-                data = self.read_page(
-                    cs_index=cs_index, block=block, page=0, col=0, num_bytes=1
-                )
-                # Read Exception
-                if data is None:
-                    trace(
-                        f"CMD\t{self.check_badblocks.__name__}\tcs={cs_index}\tblock={block}\tException"
-                    )
-                    return None
-                # Check Bad Block
-                is_bad = data[0] != 0xFF
-                if is_bad:
-                    badblock_bitmap |= 1 << block
-                trace(
-                    f"CMD\t{self.check_badblocks.__name__}\tcs={cs_index}\tblock={block}\tis_bad={is_bad}"
-                )
-            return badblock_bitmap
+############################################################################
+# NAND Flash Block Manager
+# (rp2/unix port 共通)
+############################################################################
 
 
 class NandBlockManager:
     def __init__(
         self,
         nandcmd: NandCommander,
-        keep_wp: bool = True,
         # initialized values
         is_initial: bool = False,
         num_cs: int = 0,
         initial_badblock_bitmaps: list[int] = [],
     ) -> None:
         self._nandcmd = nandcmd
-        self._nandcmd._nandio.set_wpb(0 if keep_wp else 1)
 
         if not is_initial:
             try:
@@ -569,12 +649,55 @@ class NandBlockManager:
             raise e
 
     ########################################################
+    # Wrapper functions
+    ########################################################
+    def _check_chip_num(
+        self,
+        check_num_cs: int = 2,
+        expect_id: bytearray = NandConfig.READ_ID_EXPECT,
+    ) -> int:
+        num_cs = 0
+        for cs_index in range(check_num_cs):
+            id = self._nandcmd.read_id(cs_index=cs_index)
+            is_ok = id == expect_id
+            trace(
+                f"BLKMNG\t{self._check_chip_num.__name__}\tcs={cs_index}\tis_ok={is_ok}"
+            )
+            if not is_ok:
+                return num_cs
+            num_cs += 1
+        return num_cs
+
+    def _check_allbadblocks(
+        self, cs_index: int, num_blocks: int = NandConfig.BLOCKS_PER_CS
+    ) -> int | None:
+        badblock_bitmap = 0
+        for block in range(num_blocks):
+            data = self._nandcmd.read_page(
+                cs_index=cs_index, block=block, page=0, col=0, num_bytes=1
+            )
+            # Read Exception
+            if data is None:
+                trace(
+                    f"BLKMNG\t{self._check_allbadblocks.__name__}\tcs={cs_index}\tblock={block}\tException"
+                )
+                return None
+            # Check Bad Block
+            is_bad = data[0] != 0xFF
+            if is_bad:
+                badblock_bitmap |= 1 << block
+            trace(
+                f"BLKMNG\t{self._check_allbadblocks.__name__}\tcs={cs_index}\tblock={block}\tis_bad={is_bad}"
+            )
+        return badblock_bitmap
+
+    ########################################################
     # Application functions
     ########################################################
     def init(self) -> None:
         # cs
         if self.num_cs == 0:
-            self.num_cs = self._nandcmd.check_num_active_cs()
+            self.num_cs = self._check_chip_num()
         if self.num_cs == 0:
             raise ValueError("No Active CS")
 
@@ -584,9 +707,12 @@ class NandBlockManager:
             self.badblock_bitmaps = []
         for cs_index in range(self.num_cs):
             # 片方のCSだけ初期値未設定ケースがあるので追加してからチェックした値をセット
-            if len(self.badblock_bitmaps) < cs_index:
+            if cs_index < len(self.badblock_bitmaps):
+                # 既に設定済
+                pass
+            else:
                 self.badblock_bitmaps.append(0)
-                bitmaps = self._nandcmd.check_badblocks(cs_index=cs_index)
+                bitmaps = self._check_allbadblocks(cs_index=cs_index)
                 if bitmaps is None:
                     raise ValueError("BadBlock Check Error")
                 else:
@@ -678,28 +804,37 @@ class NandBlockManager:
         )
 
 
+def get_driver(keep_wp: bool = True) -> tuple[NandIo, NandCommander]:
+    if sys.platform == "linux":
+        debug("Use Linux Driver")
+        nandio = NandIo(keep_wp=keep_wp)
+        nandcmd = NandCommander(nandio=nandio, support_cs=1, base_dir="nand_datas")
+        return nandio, nandcmd
+    else:
+        debug("Use RP2040 Driver")
+        nandio = NandIo(keep_wp=keep_wp)
+        nandcmd = NandCommander(nandio=nandio, timeout_ms=1000)
+        return nandio, nandcmd
+
+
 def main() -> None:
-    nandio = NandIo()
-    nandcmd = NandCommander(nandio=nandio)
-    blockmng = NandBlockManager(
-        nandcmd=nandcmd,
-        keep_wp=False,
-    )
+    nandio, nandcmd = get_driver(keep_wp=False)
+    blockmng = NandBlockManager(nandcmd=nandcmd)
     block = blockmng.alloc()
-    print(f"Allocated Block: {block}")
+    debug(f"Allocated Block: {block}")
 
     read_data0 = blockmng.read(cs_index=0, block=block, page=0)
     assert read_data0 is not None
-    print(f"Read Data: {read_data0.hex()}")
+    debug(f"Read Data: {read_data0.hex()}")
 
-    write_data = bytearray([x & 0xFF for x in range(NandConfig.PAGE_BYTES)])
+    write_data = bytearray([(x * 2) & 0xFF for x in range(NandConfig.PAGE_BYTES)])
     is_ok = blockmng.program(cs_index=0, block=block, page=0, data=write_data)
-    print(f"Program Result: {is_ok}")
+    debug(f"Program Result: {is_ok}")
 
     read_data1 = blockmng.read(cs_index=0, block=block, page=0)
     assert read_data1 is not None
-    print(f"Read Data: {read_data1.hex()}")
-    print(f"Data Match: {read_data1 == write_data}")
+    debug(f"Read Data: {read_data1.hex()}")
+    debug(f"Data Match: {read_data1 == write_data}")
 
 
 if __name__ == "__main__":
