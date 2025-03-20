@@ -14,7 +14,8 @@
             packages = with pkgs; [
                 python312
                 python312.pkgs.uv
-                python312.pkgs.pytest                
+                python312.pkgs.pytest   
+                micropython             
             ];
         };
     };
