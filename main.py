@@ -96,8 +96,12 @@ class NandConfig:
     MAX_CS = 2
     # ID Read Command for TC58NVG0S3HTA00
     READ_ID_EXPECT = bytearray([0x98, 0xF1, 0x80, 0x15, 0x72])
+    # data area
+    PAGE_USABLE_BYTES = 2048
+    # spare area
+    PAGE_SPARE_BYTES = 128
     # 2048byte(main) + 128byte(redundancy or other uses)
-    PAGE_BYTES = 2048 + 128
+    PAGE_ALL_BYTES = PAGE_USABLE_BYTES + PAGE_SPARE_BYTES
     # number of pages per block
     PAGES_PER_BLOCK = 64
     # number of blocks per CS
@@ -199,7 +203,7 @@ if sys.platform == "linux":
                     return bytearray(f.read())
             except OSError as e:
                 error(f"Failed to read file: {path} error={e}")
-                return bytearray([0xFF] * NandConfig.PAGE_BYTES)
+                return bytearray([0xFF] * NandConfig.PAGE_ALL_BYTES)
 
         def _write_data(
             self, cs_index: int, block: int, page: int, data: bytearray
@@ -226,7 +230,7 @@ if sys.platform == "linux":
             block: int,
             page: int,
             col: int = 0,
-            num_bytes: int = NandConfig.PAGE_BYTES,
+            num_bytes: int = NandConfig.PAGE_ALL_BYTES,
         ) -> bytearray | None:
             data = self._read_data(cs_index=cs_index, block=block, page=page)
             return data
@@ -239,7 +243,7 @@ if sys.platform == "linux":
                 cs_index=cs_index,
                 block=block,
                 page=0,
-                data=bytearray([0xFF] * NandConfig.PAGE_BYTES),
+                data=bytearray([0xFF] * NandConfig.PAGE_ALL_BYTES),
             )
             trace(
                 f"CMD\t{self.erase_block.__name__}\tcs={cs_index}\tblock={block}\tis_ok=True"
@@ -304,7 +308,7 @@ else:
             self._led = Pin("LED", Pin.OUT, value=1)
             self.setup_pin()
 
-        def seq_delay(self) -> None:
+        def delay(self) -> None:
             time.sleep_us(self._delay_us)
 
         ########################################################
@@ -399,7 +403,7 @@ else:
             self.set_io(cmd)
             self.set_cle(1)
             self.set_web(0)
-            self.seq_delay()
+            self.delay()
             self.set_web(1)
             self.set_cle(0)
 
@@ -409,7 +413,7 @@ else:
                 self.set_io(addr)
                 self.set_ale(1)
                 self.set_web(0)
-                self.seq_delay()
+                self.delay()
                 self.set_web(1)
                 self.set_ale(0)
 
@@ -421,10 +425,10 @@ else:
             self.set_io_dir(is_output=False)
             for i in range(num_bytes):
                 self.set_reb(0)
-                self.seq_delay()
+                self.delay()
                 datas.append(self.get_io())
                 self.set_reb(1)
-                self.seq_delay()
+                self.delay()
             trace(f"IO\tDOUT\t{datas.hex()}")
             self.set_io_dir(is_output=True)
             return datas
@@ -474,7 +478,7 @@ else:
             block: int,
             page: int,
             col: int = 0,
-            num_bytes: int = NandConfig.PAGE_BYTES,
+            num_bytes: int = NandConfig.PAGE_ALL_BYTES,
         ) -> bytearray | None:
             page_addr = NandConfig.create_nand_addr(block=block, page=page, col=col)
             nand = self._nandio
@@ -565,7 +569,7 @@ else:
             for i in range(len(data)):
                 nand.set_io(data[i])
                 nand.set_web(0)
-                nand.seq_delay()
+                nand.delay()
                 nand.set_web(1)
             # 2nd Command Input
             nand.input_cmd(NandCmd.PROGRAM_2ND)
@@ -772,7 +776,7 @@ class NandBlockManager:
             if block is None or cs is None:
                 raise ValueError("No Free Block")
             else:
-                # Erase Block
+                # Erase OKのものを採用。だめならやり直し
                 is_erase_ok = self._nandcmd.erase_block(cs_index=cs, block=block)
                 if is_erase_ok:
                     self._mark_alloc(cs_index=cs, block=block)
@@ -804,6 +808,75 @@ class NandBlockManager:
         )
 
 
+class Lfsr8:
+    """Linear Feedback Shift Register"""
+
+    def __init__(
+        self,
+        init_value: int = 1,
+        seed: int = 0xA5,
+    ) -> None:
+        self._init_value = init_value
+        self._current = init_value
+        self._seed = seed
+
+    def reset(self, init_value: int | None = None):
+        if init_value is not None:
+            init_value = self._init_value
+        else:
+            self._current = self._init_value
+
+    def next(self) -> int:
+        self._current = (
+            (self._current >> 1) ^ (-(self._current & 1) & self._seed)
+        ) & 0xFF
+        return self._current
+
+
+class PageCodec:
+    """
+    NAND Flash Page Encoder/Decoder
+    Reference: https://github.com/wipeseals/broccoli/blob/main/misc/design-memo/data-layout.ipynb
+    """
+
+    def __init__(
+        self,
+        scramble_seed: int = 0xA5,
+        use_scramble: bool = True,
+        use_ecc: bool = True,
+        use_crc: bool = True,
+    ) -> None:
+        self._scramble_seed = scramble_seed
+        self._use_scramble = use_scramble
+        self._use_ecc = use_ecc
+        self._use_crc = use_crc
+
+    def encode(self, data: bytearray) -> bytearray:
+        assert len(data) == NandConfig.PAGE_USABLE_BYTES
+        # TODO: scramble
+        lfsr = Lfsr8(seed=self._scramble_seed)
+        data = bytearray([lfsr.next() ^ x for x in data])
+        # TODO: ecc
+        # TODO: crc
+        return data
+
+    def decode(self, data: bytearray) -> bytearray | None:
+        assert len(data) == NandConfig.PAGE_USABLE_BYTES
+
+        # TODO: crc
+        # TODO: ecc
+        # TODO: descramble
+        lfsr = Lfsr8(seed=self._scramble_seed)
+        data = bytearray([lfsr.next() ^ x for x in data])
+        # TODO: CRC Errorを解消できなかった場合、エラー応答する
+        return data
+
+
+############################################################################
+# Main
+############################################################################
+
+
 def get_driver(keep_wp: bool = True) -> tuple[NandIo, NandCommander]:
     if sys.platform == "linux":
         debug("Use Linux Driver")
@@ -820,21 +893,18 @@ def get_driver(keep_wp: bool = True) -> tuple[NandIo, NandCommander]:
 def main() -> None:
     nandio, nandcmd = get_driver(keep_wp=False)
     blockmng = NandBlockManager(nandcmd=nandcmd)
-    block = blockmng.alloc()
-    debug(f"Allocated Block: {block}")
+    codec = PageCodec(scramble_seed=0xA5, use_scramble=True, use_ecc=True, use_crc=True)
 
-    read_data0 = blockmng.read(cs_index=0, block=block, page=0)
-    assert read_data0 is not None
-    debug(f"Read Data: {read_data0.hex()}")
+    write_data = bytearray(
+        [(x * 2) & 0xFF for x in range(NandConfig.PAGE_USABLE_BYTES)]
+    )
+    write_data_enc = codec.encode(write_data)
+    debug(f"Write Data: {write_data.hex()}")
+    debug(f"Write Data Encoded: {write_data_enc.hex()}")
 
-    write_data = bytearray([(x * 2) & 0xFF for x in range(NandConfig.PAGE_BYTES)])
-    is_ok = blockmng.program(cs_index=0, block=block, page=0, data=write_data)
-    debug(f"Program Result: {is_ok}")
-
-    read_data1 = blockmng.read(cs_index=0, block=block, page=0)
-    assert read_data1 is not None
-    debug(f"Read Data: {read_data1.hex()}")
-    debug(f"Data Match: {read_data1 == write_data}")
+    write_data_dec = codec.decode(write_data_enc)
+    debug(f"Write Data Decoded: {write_data_dec.hex()}")
+    assert write_data == write_data_dec
 
 
 if __name__ == "__main__":
