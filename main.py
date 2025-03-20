@@ -38,7 +38,7 @@ CURRENT_LOG_LEVEL = LogLevel.TRACE
 
 def log(level: int, msg: str) -> None:
     if level <= CURRENT_LOG_LEVEL:
-        print(f"[{LogLevel.to_str(level)}]{msg}")
+        print(f"[{time.ticks_us()}][{LogLevel.to_str(level)}]{msg}")
     else:
         pass
 
