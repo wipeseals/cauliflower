@@ -16,8 +16,7 @@ TODO:
 - Cauliflower を実行
   - Cauliflower のリポジトリをクローン
   - `main.py` を Raspberry Pi Pico 上に転送もしくはそのまま実行
-    - vscode + [MicroPico Extension](https://marketplace.visualstudio.com/items?itemName=paulober.pico-w-go): `MicroPico: Run Current file on Pico`
-    - Thonny: `Run -> Run current script`
+    - vscode + [MicroPico Extension](https://marketplace.visualstudio.com/items?itemName=paulober.pico-w-go): `MicroPico: Upload project to Pico`
     - mpremote: `mpremote run main.py`
 
 ```bash
