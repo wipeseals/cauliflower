@@ -11,5 +11,11 @@
     ],
     "python.analysis.extraPaths": [
         "~/.micropico-stubs/included"
-    ]
+    ],
+    "micropico.syncFolder": "cauliflower",
+    "micropico.syncFileTypes": [
+        "py",
+        "mpy"
+    ],
+    "micropico.softResetAfterUpload": true
 }
