@@ -1,6 +1,6 @@
 import sys
 import json
-from .log import error, trace, debug, info, LogLevel
+from log import error, trace, debug, info, LogLevel
 
 
 ############################################################################
@@ -87,10 +87,10 @@ class NandConfig:
 sim_platforms = ["linux", "windows", "webassembly", "qemu"]
 if sys.platform in sim_platforms:
     # Simulator
-    from . import driver_sim as d_sim
+    import driver_sim as d_sim
 else:
     # RP2040 Driver
-    from . import driver_rp2 as d_rp2
+    import driver_rp2 as d_rp2
 
 
 def get_driver(

@@ -1,7 +1,7 @@
 import time
 
-from .log import error, trace, debug, info, LogLevel
-from .nand import NandConfig, NandCmd, NandStatus
+from log import error, trace, debug, info, LogLevel
+from nand import NandConfig, NandCmd, NandStatus
 
 from machine import Pin
 
