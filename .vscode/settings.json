@@ -11,5 +11,11 @@
     ],
     "python.analysis.extraPaths": [
         "~/.micropico-stubs/included"
-    ]
+    ],
+    "micropico.syncFolder": "src",
+    "micropico.syncFileTypes": [
+        "py",
+        "mpy"
+    ],
+    "micropico.softResetAfterUpload": true
 }
