@@ -15,7 +15,7 @@ TODO:
     - 詳細は [MicroPython - Raspberry Pi](https://www.raspberrypi.com/documentation/microcontrollers/micropython.html) を参照。
 - Cauliflower を実行
   - Cauliflower のリポジトリをクローン
-  - `main.py` を Raspberry Pi Pico 上に転送もしくはそのまま実行
+  - `src` の内容を Raspberry Pi Pico 上に転送して実行
     - vscode + [MicroPico Extension](https://marketplace.visualstudio.com/items?itemName=paulober.pico-w-go): `MicroPico: Upload project to Pico`
     - mpremote: `mpremote run main.py`
 
@@ -33,7 +33,7 @@ MicroPython の Windows/Linux 向けポートを用いれば、そのまま実�
 NAND Flash への Read/Erase/Program 操作は、 `nand_datas/*.bin` のファイル操作に置き換えられます。
 
 ```bash
-$ micropython main.py
+$ micropython -i src/main.py
 [DEBUG]Use Linux Driver
 [ERROR]Failed to create directory: nand_datas
 [TRACE]BLKMNG   load    nand_block_allocator.json       {"num_cs": 1, "badblock_bitmaps": [0], "allocated_bitmaps": [0]}
@@ -54,7 +54,7 @@ direnv: using flake
 direnv: nix-direnv: Using cached dev shell
 direnv: export +CONFIG_SHELL +DETERMINISTIC_BUILD +HOST_PAT...
 
-$ micropython main.py
+$ micropython -i src/main.py
 [DEBUG]Use Linux Driver
 [ERROR]Failed to create directory: nand_datas
 [TRACE]BLKMNG   load    nand_block_allocator.json       {"num_cs": 1, "badblock_bitmaps": [0], "allocated_bitmaps": [0]}
