@@ -116,7 +116,7 @@ class NandBlockManager:
         # initialized values
         is_initial: bool = False,
         num_cs: int = 0,
-        initial_badblock_bitmaps: list[int] = [],
+        initial_badblock_bitmaps: list[int] | None = None,
     ) -> None:
         self._nandcmd = nandcmd
 
@@ -131,6 +131,7 @@ class NandBlockManager:
         if is_initial:
             trace(f"BLKMNG\t{self.__init__.__name__}\tinitialize")
             self.num_cs = num_cs
+            assert initial_badblock_bitmaps is not None
             self.badblock_bitmaps = initial_badblock_bitmaps
             self.init()
             # save initialized values
