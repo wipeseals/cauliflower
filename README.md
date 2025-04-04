@@ -10,21 +10,63 @@ TODO:
 
 ### RPi Pico ([JISC-SSD](https://crane-elec.co.jp/products/vol-28/)) 上で実行する
 
-- MicroPython のインストール
-  - Raspberry Pi Pico の公式サイトから、RP2040 用の MicroPython Runtime の UF2 File をダウンロードし書き込み
-    - 詳細は [MicroPython - Raspberry Pi](https://www.raspberrypi.com/documentation/microcontrollers/micropython.html) を参照。
-- Cauliflower を実行
-  - Cauliflower のリポジトリをクローン
-  - `src` の内容を Raspberry Pi Pico 上に転送して実行
-    - vscode + [MicroPico Extension](https://marketplace.visualstudio.com/items?itemName=paulober.pico-w-go): `MicroPico: Upload project to Pico`
-    - mpremote: `mpremote run main.py`
+#### MicroPython のインストール
+
+- Raspberry Pi Pico の公式サイトから、RP2040 用の MicroPython Runtime の UF2 File をダウンロードし書き込み
+  - 詳細は [MicroPython - Raspberry Pi](https://www.raspberrypi.com/documentation/microcontrollers/micropython.html) を参照
+
+#### Cauliflower を実行
+
+- Cauliflower のリポジトリをクローン
+- `src` の内容を Raspberry Pi Pico 上に転送して実行
+  - vscode + [MicroPico Extension](https://marketplace.visualstudio.com/items?itemName=paulober.pico-w-go): `MicroPico: Upload project to Pico`
+  - mpremote
 
 ```bash
-[DEBUG]Use RP2040 Driver
-[TRACE]IO       SETUP
-[TRACE]IO       WPB     1
-[INFO]IO        WPB     Write Protect Disable
-[TRACE]BLKMNG   load    nand_block_allocator.json       {"num_cs": 1, "allocated_bitma ...
+$ uvx mpremote connect <TARGET_SERIAL> + fs --recursive --force cp src/main.py src/nand.py src/log.py src/driver_rp2.py :/ + fs ls + soft-reset + run src/main.py + rep
+
+cp src/main.py :/
+cp src/nand.py :/
+cp src/log.py :/
+cp src/driver_rp2.py :/
+ls :
+        9982 driver_rp2.py
+        1105 log.py
+        2015 main.py
+       13921 nand.py
+[7122838][DEBUG]Use RP2040 Driver
+[7125017][TRACE]IO      SETUP
+[7126503][TRACE]IO      WPB     1
+[7127216][INFO]IO       WPB     Write Protect Disable
+[7128296][TRACE]IO      INIT
+[7129131][TRACE]IO      IO      OUT
+[7130074][TRACE]CS      None
+[7131263][TRACE]IO      CS      0
+[7132279][TRACE]IO      CMD     90
+[7133828][TRACE]IO      ADDR    00
+[7135139][TRACE]IO      IO      IN
+[7137614][TRACE]IO      DOUT    98f1801572
+[7138506][TRACE]IO      IO      OUT
+[7139458][TRACE]CS      None
+[7140645][TRACE]CMD     read_id cs=0    id=98f1801572
+[7141769][INFO]CS0: bytearray(b'\x98\xf1\x80\x15r')
+[7142519][TRACE]IO      INIT
+[7143347][TRACE]IO      IO      OUT
+[7144267][TRACE]CS      None
+[7145452][TRACE]IO      CS      1
+[7146416][TRACE]IO      CMD     90
+[7147888][TRACE]IO      ADDR    00
+[7149164][TRACE]IO      IO      IN
+[7151581][TRACE]IO      DOUT    0000000000
+[7152472][TRACE]IO      IO      OUT
+[7153405][TRACE]CS      None
+[7154580][TRACE]CMD     read_id cs=1    id=0000000000
+[7155701][INFO]CS1: bytearray(b'\x00\x00\x00\x00\x00')
+Connected to MicroPython at COM13
+Use Ctrl-] or Ctrl-x to exit this shell
+>
+MicroPython v1.24.1 on 2024-11-29; Raspberry Pi Pico with RP2040
+Type "help()" for more information.
 ```
 
 ### Linux/Windows 上で実行する
@@ -32,41 +74,26 @@ TODO:
 MicroPython の Windows/Linux 向けポートを用いれば、そのまま実行することができます。
 NAND Flash への Read/Erase/Program 操作は、 `nand_datas/*.bin` のファイル操作に置き換えられます。
 
-```bash
-$ micropython -i src/main.py
-[DEBUG]Use Linux Driver
-[ERROR]Failed to create directory: nand_datas
-[TRACE]BLKMNG   load    nand_block_allocator.json       {"num_cs": 1, "badblock_bitmaps": [0], "allocated_bitmaps": [0]}
-[TRACE]BLKMNG   __init__        load
-[TRACE]CMD      erase_block     cs=0    block=0 is_ok=True
-[TRACE]BLKMNG   _mark_alloc     cs=0    block=0 1
-...
-```
-
-### Nix 環境/NixOs 上で実行
-
-nix, flakes, direnv を利用している場合、以下のコマンドで実行することができます。
+nix, flakes, direnv を利用している場合、`direnv allow` で micropython 環境を導入できます。
 
 ```bash
-$ direnv allow # 初回のみ
-direnv: loading /mnt/e/repos/cauliflower/.envrc
-direnv: using flake
-direnv: nix-direnv: Using cached dev shell
-direnv: export +CONFIG_SHELL +DETERMINISTIC_BUILD +HOST_PAT...
-
 $ micropython -i src/main.py
-[DEBUG]Use Linux Driver
-[ERROR]Failed to create directory: nand_datas
-[TRACE]BLKMNG   load    nand_block_allocator.json       {"num_cs": 1, "badblock_bitmaps": [0], "allocated_bitmaps": [0]}
-[TRACE]BLKMNG   __init__        load
-[TRACE]CMD      erase_block     cs=0    block=0 is_ok=True
-[TRACE]BLKMNG   _mark_alloc     cs=0    block=0 1
-...
+[6759914348][DEBUG]Use Simulator Driver
+[6759915242][ERROR]Failed to create directory: nand_datas
+[6759916347][INFO]CS0: bytearray(b'\x98\xf1\x80\x15r')
+[6759916400][INFO]CS1: bytearray(b'\x00\x00\x00\x00\x00')
+MicroPython v1.24.1 on 1980-01-01; linux [GCC 14.2.1] version
+Use Ctrl-D to exit, Ctrl-E for paste mode
+>>>
 ```
 
 ### Structure
 
-TODO:
+- Flash Driver
+  - `src/driver_rp2.py`: RP2040 用の Flash Driver
+  - `src/driver_sim.py`: Simulator 用の Flash Driver
+- Flash Translation
+  - `src/nand.py`: NAND Flash の操作を行うクラス
 
 ## Reference
 
