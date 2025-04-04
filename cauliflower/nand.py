@@ -1,8 +1,6 @@
 import sys
 import json
-from cauliflower.log import error, trace, debug, info, LogLevel
-from cauliflower.driver import rp2
-from cauliflower.driver.rp2 import NandIo, NandCommander
+from .log import error, trace, debug, info, LogLevel
 
 
 ############################################################################
@@ -86,27 +84,35 @@ class NandConfig:
 # RP2040 Driver or Simulator
 ############################################################################
 
+sim_platforms = ["linux", "windows", "webassembly", "qemu"]
+if sys.platform in sim_platforms:
+    # Simulator
+    from . import driver_sim as d_sim
+else:
+    # RP2040 Driver
+    from . import driver_rp2 as d_rp2
 
-def get_driver(keep_wp: bool = True) -> tuple[NandIo, NandCommander]:
-    is_sim = sys.platform in ["linux", "windows", "webassembly", "qemu"]
+
+def get_driver(
+    keep_wp: bool = True,
+) -> tuple[d_sim.NandIo | d_rp2.NandIo, d_sim.NandCommander | d_rp2.NandCommander]:
+    is_sim = sys.platform in sim_platforms
     if is_sim:
-        from cauliflower.driver import sim
-
-        debug("Use RP2040 Driver")
-        nandio = sim.NandIo(keep_wp=keep_wp)
-        nandcmd = sim.NandCommander(nandio=nandio)
-        return nandio, nandcmd  # type: ignore (sim.NandIo, sim.NandCommander)
+        debug("Use Simulator Driver")
+        nandio = d_sim.NandIo(keep_wp=keep_wp)
+        nandcmd = d_sim.NandCommander(nandio=nandio)
+        return nandio, nandcmd
     else:
         debug("Use RP2040 Driver")
-        nandio = rp2.NandIo(keep_wp=keep_wp)
-        nandcmd = rp2.NandCommander(nandio=nandio, timeout_ms=1000)
+        nandio = d_rp2.NandIo(keep_wp=keep_wp)
+        nandcmd = d_rp2.NandCommander(nandio=nandio, timeout_ms=1000)
         return nandio, nandcmd
 
 
 class NandBlockManager:
     def __init__(
         self,
-        nandcmd: NandCommander,
+        nandcmd: d_sim.NandCommander | d_rp2.NandCommander,
         # initialized values
         is_initial: bool = False,
         num_cs: int = 0,

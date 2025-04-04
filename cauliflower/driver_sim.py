@@ -1,6 +1,6 @@
 import os
-from cauliflower.log import error, trace, debug, info, LogLevel
-from cauliflower.nand import NandConfig
+from .log import error, trace, debug, info, LogLevel
+from .nand import NandConfig
 
 
 class NandIo:
