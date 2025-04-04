@@ -336,7 +336,7 @@ class Lfsr8:
 
     def reset(self, init_value: int | None = None):
         if init_value is not None:
-            init_value = self._init_value
+            self._current = init_value
         else:
             self._current = self._init_value
 
