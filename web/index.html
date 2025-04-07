@@ -1,18 +1,36 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
-    <head>
-        <title>cauliflower</title>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width,initial-scale=1.0">
-        <link rel="stylesheet" href="https://pyscript.net/releases/2025.3.1/core.css">
-        <script type="module" src="https://pyscript.net/releases/2025.3.1/core.js"></script>
-    </head>
-    <body>
-        <script
-        type="mpy"
-        src="../src/main.py"
-        config="./pyscript.toml"
-        terminal
-        ></script>
+  <head>
+    <title>cauliflower</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      href="https://pyscript.net/releases/2025.3.1/core.css"
+    />
+    <script
+      type="module"
+      src="https://pyscript.net/releases/2025.3.1/core.js"
+    ></script>
+  </head>
+  <body>
+    <h1>cauliflower</h1>
+    <h2>Simulation logs</h2>
+    <script
+      type="mpy"
+      src="../src/main.py"
+      config="./sim.toml"
+      terminal
+    ></script>
+    <script type="mpy" src="./viewer.py" config="./viewer.toml" worker></script>
+
+    <script type="py-editor" env="shared">
+      import os
+      print(os.listdir())
+    </script>
+    <script type="mpy-editor" env="shared">
+      import os
+      print(os.listdir())
+    </script>
   </body>
 </html>

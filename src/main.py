@@ -54,8 +54,14 @@ def test_codec() -> None:
     assert write_data == write_data_dec
 
 
+import os
+
+
 def main() -> None:
     test_readid()
+    test_erase_program_read()
+    test_codec()
+    print(os.listdir())
 
 
 if __name__ == "__main__":

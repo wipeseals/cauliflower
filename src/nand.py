@@ -131,8 +131,9 @@ class NandBlockManager:
         if is_initial:
             trace(f"BLKMNG\t{self.__init__.__name__}\tinitialize")
             self.num_cs = num_cs
-            assert initial_badblock_bitmaps is not None
-            self.badblock_bitmaps = initial_badblock_bitmaps
+            self.badblock_bitmaps = (
+                initial_badblock_bitmaps if initial_badblock_bitmaps else []
+            )
             self.init()
             # save initialized values
             self.save()

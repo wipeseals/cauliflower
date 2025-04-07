@@ -1,5 +1,0 @@
-[files]
-"../src/main.py" = "./main.py"
-"../src/log.py" = "./log.py"
-"../src/nand.py" = "./nand.py"
-"../src/driver_sim.py" = "./driver_sim.py"
