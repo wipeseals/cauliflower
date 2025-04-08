@@ -15,10 +15,14 @@ class NandCommander:
         nandio: NandIo,
         num_chip: int = 1,
         base_dir: str = "nand_datas",
+        ram_cache: bool = True,
     ) -> None:
         self._nandio = nandio
         self._num_chip = num_chip
         self._base_dir = base_dir
+        self._ram_cache = ram_cache
+        # chip -> block -> page -> data
+        self._ram_cache_data: dict[int, dict[int, dict[int, bytearray]]] = dict()
 
         # os.pathが無いのでとりあえず試す
         try:
@@ -43,11 +47,32 @@ class NandCommander:
 
         return f"{self._base_dir}/cs{cs_index:02d}_block{block:04d}_page{page:02d}.bin"
 
+    def _update_ram_cache(
+        self, cs_index: int, block: int, page: int, data: bytearray
+    ) -> None:
+        if cs_index not in self._ram_cache_data:
+            self._ram_cache_data[cs_index] = dict()
+        if block not in self._ram_cache_data[cs_index]:
+            self._ram_cache_data[cs_index][block] = dict()
+        self._ram_cache_data[cs_index][block][page] = data
+
     def _read_data(self, cs_index: int, block: int, page: int) -> bytearray | None:
+        # read cache
+        if self._ram_cache and cs_index in self._ram_cache_data:
+            if block in self._ram_cache_data[cs_index]:
+                if page in self._ram_cache_data[cs_index][block]:
+                    return self._ram_cache_data[cs_index][block][page]
+
+        # from file
         path = self._data_path(cs_index=cs_index, block=block, page=page)
         try:
             with open(path, "rb") as f:
-                return bytearray(f.read())
+                dst = bytearray(f.read())
+                # cache to ram
+                if self._ram_cache:
+                    self._update_ram_cache(cs_index, block, page, dst)
+                return dst
+
         except OSError as e:
             error(f"Failed to read file: {path} error={e}")
             return bytearray([0xFF] * NandConfig.PAGE_ALL_BYTES)
@@ -55,6 +80,10 @@ class NandCommander:
     def _write_data(
         self, cs_index: int, block: int, page: int, data: bytearray
     ) -> None:
+        # cache to ram
+        if self._ram_cache:
+            self._update_ram_cache(cs_index, block, page, data)
+        # to file
         path = self._data_path(cs_index=cs_index, block=block, page=page)
         try:
             with open(path, "wb") as f:
