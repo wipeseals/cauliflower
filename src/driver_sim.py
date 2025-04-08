@@ -14,7 +14,7 @@ class NandCommander:
         self,
         nandio: NandIo,
         num_chip: int = 1,
-        base_dir: str = "nand_datas",
+        base_dir: str | None = None,
         ram_cache: bool = True,
     ) -> None:
         self._nandio = nandio
@@ -24,17 +24,18 @@ class NandCommander:
         # chip -> block -> page -> data
         self._ram_cache_data: dict[int, dict[int, dict[int, bytearray]]] = dict()
 
-        # os.pathが無いのでとりあえず試す
-        try:
-            os.mkdir(base_dir)
-        except OSError:
-            error(f"Failed to create directory: {base_dir}")
-        # stat取れないケースは失敗
-        try:
-            os.stat(base_dir)
-        except OSError as e:
-            error(f"Failed to stat directory: {base_dir} error={e}")
-            raise e
+        if base_dir is not None:
+            # os.pathが無いのでとりあえず試す
+            try:
+                os.mkdir(base_dir)
+            except OSError:
+                error(f"Failed to create directory: {base_dir}")
+            # stat取れないケースは失敗
+            try:
+                os.stat(base_dir)
+            except OSError as e:
+                error(f"Failed to stat directory: {base_dir} error={e}")
+                raise e
 
     def _data_path(self, cs_index: int, block: int, page: int) -> str:
         # check range
@@ -63,19 +64,26 @@ class NandCommander:
                 if page in self._ram_cache_data[cs_index][block]:
                     return self._ram_cache_data[cs_index][block][page]
 
-        # from file
-        path = self._data_path(cs_index=cs_index, block=block, page=page)
-        try:
-            with open(path, "rb") as f:
-                dst = bytearray(f.read())
-                # cache to ram
-                if self._ram_cache:
-                    self._update_ram_cache(cs_index, block, page, dst)
-                return dst
+        if self._base_dir is None:
+            dst = bytearray([0xFF] * NandConfig.PAGE_ALL_BYTES)
+            # cache to ram
+            if self._ram_cache:
+                self._update_ram_cache(cs_index, block, page, dst)
+            return dst
+        else:
+            # from file
+            path = self._data_path(cs_index=cs_index, block=block, page=page)
+            try:
+                with open(path, "rb") as f:
+                    dst = bytearray(f.read())
+                    # cache to ram
+                    if self._ram_cache:
+                        self._update_ram_cache(cs_index, block, page, dst)
+                    return dst
 
-        except OSError as e:
-            error(f"Failed to read file: {path} error={e}")
-            return bytearray([0xFF] * NandConfig.PAGE_ALL_BYTES)
+            except OSError as e:
+                error(f"Failed to read file: {path} error={e}")
+                return bytearray([0xFF] * NandConfig.PAGE_ALL_BYTES)
 
     def _write_data(
         self, cs_index: int, block: int, page: int, data: bytearray
@@ -83,13 +91,18 @@ class NandCommander:
         # cache to ram
         if self._ram_cache:
             self._update_ram_cache(cs_index, block, page, data)
-        # to file
-        path = self._data_path(cs_index=cs_index, block=block, page=page)
-        try:
-            with open(path, "wb") as f:
-                f.write(data)
-        except OSError as e:
-            error(f"Failed to write file: {path} error={e}")
+
+        if self._base_dir is None:
+            # do nothing
+            return
+        else:
+            # to file
+            path = self._data_path(cs_index=cs_index, block=block, page=page)
+            try:
+                with open(path, "wb") as f:
+                    f.write(data)
+            except OSError as e:
+                error(f"Failed to write file: {path} error={e}")
 
     ########################################################
     # Communication functions

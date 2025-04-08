@@ -2,6 +2,8 @@
 
 Toy USB Massstorage device running on raspberry pi pico implemented in MicroPython.
 
+**[Online Simulator Demo](https://wipeseals.github.io/cauliflower/)**
+
 ## Features
 
 TODO:
