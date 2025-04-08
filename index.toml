@@ -1,5 +1,5 @@
 [files]
-"{FROM}" = "../src"
+"{FROM}" = "./src"
 "{TO}" = "."
 "{FROM}/main.py" = "{TO}/main.py"
 "{FROM}/log.py" = "{TO}/log.py"
