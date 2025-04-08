@@ -15,3 +15,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# sim data
+!misc/sim_nand_block_allocator.json
