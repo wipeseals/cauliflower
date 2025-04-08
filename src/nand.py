@@ -115,7 +115,7 @@ class NandBlockManager:
         nandcmd: d_sim.NandCommander | d_rp2.NandCommander,
         # initialized values
         is_initial: bool = False,
-        num_cs: int = 0,
+        num_chip: int = 0,
         initial_badblock_bitmaps: list[int] | None = None,
     ) -> None:
         self._nandcmd = nandcmd
@@ -130,9 +130,10 @@ class NandBlockManager:
 
         if is_initial:
             trace(f"BLKMNG\t{self.__init__.__name__}\tinitialize")
-            self.num_cs = num_cs
-            assert initial_badblock_bitmaps is not None
-            self.badblock_bitmaps = initial_badblock_bitmaps
+            self.num_chip = num_chip
+            self.badblock_bitmaps = (
+                initial_badblock_bitmaps if initial_badblock_bitmaps else []
+            )
             self.init()
             # save initialized values
             self.save()
@@ -140,7 +141,7 @@ class NandBlockManager:
     def save(self, filepath: str = "nand_block_allocator.json") -> None:
         json_str = json.dumps(
             {
-                "num_cs": self.num_cs,
+                "num_chip": self.num_chip,
                 "badblock_bitmaps": self.badblock_bitmaps,
                 "allocated_bitmaps": self.allocated_bitmaps,
             }
@@ -158,7 +159,7 @@ class NandBlockManager:
             f = open(filepath, "r")
             json_text = f.read()
             data = json.loads(json_text)
-            self.num_cs = data["num_cs"]
+            self.num_chip = data["num_chip"]
             self.badblock_bitmaps = data["badblock_bitmaps"]
             self.allocated_bitmaps = data["allocated_bitmaps"]
             f.close()
@@ -171,20 +172,20 @@ class NandBlockManager:
     ########################################################
     def _check_chip_num(
         self,
-        check_num_cs: int = 2,
+        check_num_chip: int = 2,
         expect_id: bytearray = NandConfig.READ_ID_EXPECT,
     ) -> int:
-        num_cs = 0
-        for cs_index in range(check_num_cs):
+        num_chip = 0
+        for cs_index in range(check_num_chip):
             id = self._nandcmd.read_id(cs_index=cs_index)
             is_ok = id == expect_id
             trace(
                 f"BLKMNG\t{self._check_chip_num.__name__}\tcs={cs_index}\tis_ok={is_ok}"
             )
             if not is_ok:
-                return num_cs
-            num_cs += 1
-        return num_cs
+                return num_chip
+            num_chip += 1
+        return num_chip
 
     def _check_allbadblocks(
         self, cs_index: int, num_blocks: int = NandConfig.BLOCKS_PER_CS
@@ -214,16 +215,16 @@ class NandBlockManager:
     ########################################################
     def init(self) -> None:
         # cs
-        if self.num_cs == 0:
-            self.num_cs = self._check_chip_num()
-        if self.num_cs == 0:
+        if self.num_chip == 0:
+            self.num_chip = self._check_chip_num()
+        if self.num_chip == 0:
             raise ValueError("No Active CS")
 
-        trace(f"BLKMNG\t{self.init.__name__}\tnum_cs={self.num_cs}")
+        trace(f"BLKMNG\t{self.init.__name__}\tnum_chip={self.num_chip}")
         # badblock
         if self.badblock_bitmaps is None:
             self.badblock_bitmaps = []
-        for cs_index in range(self.num_cs):
+        for cs_index in range(self.num_chip):
             # 片方のCSだけ初期値未設定ケースがあるので追加してからチェックした値をセット
             if cs_index < len(self.badblock_bitmaps):
                 # 既に設定済
@@ -235,23 +236,23 @@ class NandBlockManager:
                     raise ValueError("BadBlock Check Error")
                 else:
                     self.badblock_bitmaps[cs_index] = bitmaps
-        for cs_index in range(self.num_cs):
+        for cs_index in range(self.num_chip):
             trace(
                 f"BLKMNG\t{self.init.__name__}\tbadblock\tcs={cs_index}\t{self.badblock_bitmaps[cs_index]:0x}"
             )
         # allocated bitmap
-        self.allocated_bitmaps = [0] * self.num_cs
+        self.allocated_bitmaps = [0] * self.num_chip
         # badblock部分は確保済としてマーク
-        for cs_index in range(self.num_cs):
+        for cs_index in range(self.num_chip):
             self.allocated_bitmaps[cs_index] = self.badblock_bitmaps[cs_index]
-        for cs_index in range(self.num_cs):
+        for cs_index in range(self.num_chip):
             trace(
                 f"BLKMNG\t{self.init.__name__}\tallocated\tcs={cs_index}\t{self.allocated_bitmaps[cs_index]:0x}"
             )
 
     def _pick_free(self) -> tuple[int | None, int | None]:
         # 先頭から空きを探す
-        for cs_index in range(self.num_cs):
+        for cs_index in range(self.num_chip):
             for block in range(NandConfig.BLOCKS_PER_CS):
                 # free & not badblock
                 if (self.allocated_bitmaps[cs_index] & (1 << block)) == 0 and (

@@ -9,10 +9,10 @@ from nand import NandConfig, NandBlockManager, PageCodec, get_driver
 ############################################################################
 
 
-def test_readid(num_cs: int = 2) -> None:
+def test_readid(num_chip: int = 2) -> None:
     """READ ID"""
     nandio, nandcmd = get_driver(keep_wp=False)
-    for i in range(num_cs):
+    for i in range(num_chip):
         ret = nandcmd.read_id(i)
         info(f"CS{i}: {ret}")
 
@@ -54,8 +54,14 @@ def test_codec() -> None:
     assert write_data == write_data_dec
 
 
+import os
+
+
 def main() -> None:
     test_readid()
+    test_erase_program_read()
+    test_codec()
+    print(os.listdir())
 
 
 if __name__ == "__main__":

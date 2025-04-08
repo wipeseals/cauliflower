@@ -1,0 +1,7 @@
+[files]
+"{FROM}" = "./src"
+"{TO}" = "."
+"{FROM}/main.py" = "{TO}/main.py"
+"{FROM}/log.py" = "{TO}/log.py"
+"{FROM}/nand.py" = "{TO}/nand.py"
+"{FROM}/driver_sim.py" = "{TO}/driver_sim.py"
