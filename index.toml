@@ -5,3 +5,5 @@
 "{FROM}/log.py" = "{TO}/log.py"
 "{FROM}/nand.py" = "{TO}/nand.py"
 "{FROM}/driver_sim.py" = "{TO}/driver_sim.py"
+
+"misc/sim_nand_block_allocator.json" = "{TO}/nand_block_allocator.json"

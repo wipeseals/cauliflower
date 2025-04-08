@@ -26,5 +26,46 @@
       config="./index.toml"
       terminal
     ></script>
+    <h2>[TEST] READ ID</h2>
+    <script type="mpy-editor" config="./index.toml" terminal>
+      from log import info
+      from nand import get_driver, NandConfig
+
+
+      def test_readid(num_chip: int = 2) -> None:
+          nandio, nandcmd = get_driver(keep_wp=False)
+          for i in range(num_chip):
+              ret = nandcmd.read_id(i)
+              info(f"CS{i}: ExpectId={ret == NandConfig.READ_ID_EXPECT}: {ret}")
+
+
+      test_readid()
+    </script>
+    <h2>[TEST] Erase/Program/Read</h2>
+    <script type="mpy-editor" config="./index.toml" terminal>
+      from log import info
+      from nand import get_driver, NandConfig, NandBlockManager
+
+      def test_erase_program_read() -> None:
+          nandio, nandcmd = get_driver(keep_wp=False)
+          blockmng = NandBlockManager(nandcmd=nandcmd)
+          block = blockmng.alloc()
+          info(f"Allocated Block: {block}")
+
+          read_data0 = blockmng.read(cs_index=0, block=block, page=0)
+          assert read_data0 is not None
+          info(f"Read Data: {read_data0.hex()}")
+
+          write_data = bytearray([(x * 2) & 0xFF for x in range(NandConfig.PAGE_ALL_BYTES)])
+          is_ok = blockmng.program(cs_index=0, block=block, page=0, data=write_data)
+          info(f"Program Result: {is_ok}")
+
+          read_data1 = blockmng.read(cs_index=0, block=block, page=0)
+          assert read_data1 is not None
+          info(f"Read Data: {read_data1.hex()}")
+          info(f"Data Match: {read_data1 == write_data}")
+
+      test_erase_program_read()
+    </script>
   </body>
 </html>
