@@ -427,7 +427,9 @@ class PageCodec:
         # data = bytearray([lfsr.next() ^ x for x in data])
         # TODO: ecc
         # TODO: crc
-        return data
+        return data + bytearray(
+            [0x00] * NandConfig.PAGE_SPARE_BYTES
+        )  # TODO: 正式なParity付与
 
     def decode(self, data: bytearray) -> bytearray | None:
         assert len(data) == NandConfig.PAGE_ALL_BYTES
@@ -438,4 +440,4 @@ class PageCodec:
         # lfsr = Lfsr8(seed=self._scramble_seed)
         # data = bytearray([lfsr.next() ^ x for x in data])
         # TODO: CRC Errorを解消できなかった場合、エラー応答する
-        return data
+        return data[: NandConfig.PAGE_USABLE_BYTES]  # Parity除去
