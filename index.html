@@ -49,8 +49,8 @@
       def test_erase_program_read() -> None:
           nandio, nandcmd = get_driver(keep_wp=False)
           blockmng = NandBlockManager(nandcmd=nandcmd)
-          block = blockmng.alloc()
-          info(f"Allocated Block: {block}")
+          chip, block = blockmng.alloc()
+          info(f"Allocated Block: chip={chip}, block={block}")
 
           read_data0 = blockmng.read(chip_index=0, block=block, page=0)
           assert read_data0 is not None
