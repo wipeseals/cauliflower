@@ -1,5 +1,6 @@
 import sys
 import json
+import math
 from log import error, trace, debug, info, LogLevel
 
 
@@ -46,6 +47,59 @@ class NandConfig:
     PAGES_PER_BLOCK = 64
     # number of blocks per CS
     BLOCKS_PER_CS = 1024
+    # sector size
+    SECTOR_BYTES = 512
+    # number of sectors per page (2048byte / 512byte = 4)
+    SECTOR_PER_PAGE = PAGE_USABLE_BYTES // SECTOR_BYTES
+
+    # sector bits (log2(4) = 2)
+    SECTOR_BITS = math.ceil(math.log2(SECTOR_PER_PAGE))
+    # page bits (log2(64) = 6)
+    PAGE_BITS = math.ceil(math.log2(PAGES_PER_BLOCK))
+    # block bits (log2(1024) = 10)
+    BLOCK_BITS = math.ceil(math.log2(BLOCKS_PER_CS))
+    # cs bits (log2(2) = 1)
+    CS_BITS = math.ceil(math.log2(MAX_CS))
+    # total bits
+    TOTAL_BITS = SECTOR_BITS + PAGE_BITS + BLOCK_BITS + CS_BITS
+
+    # sector mask (2^2 - 1 = 0x3)
+    SECTOR_MASK = (1 << SECTOR_BITS) - 1
+    # page mask (2^6 - 1 = 0x3F)
+    PAGE_MASK = (1 << PAGE_BITS) - 1
+    # block mask (2^10 - 1 = 0x3FF)
+    BLOCK_MASK = (1 << BLOCK_BITS) - 1
+    # cs mask (2^1 - 1 = 0x1)
+    CS_MASK = (1 << CS_BITS) - 1
+
+    @staticmethod
+    def decode_phys_addr(addr: int) -> tuple[int, int, int, int]:
+        """Decode NAND Flash Address
+        | chip[0] | block[9:0] | page[5:0] | sector[1:0] |
+        """
+        sector = addr & NandConfig.SECTOR_MASK
+        addr >>= NandConfig.SECTOR_BITS
+        page = addr & NandConfig.PAGE_MASK
+        addr >>= NandConfig.PAGE_BITS
+        block = addr & NandConfig.BLOCK_MASK
+        addr >>= NandConfig.BLOCK_BITS
+        chip = addr & NandConfig.CS_MASK
+        addr >>= NandConfig.CS_BITS
+        return chip, block, page, sector
+
+    @staticmethod
+    def encode_phys_addr(chip: int, block: int, page: int, sector: int) -> int:
+        """Encode NAND Flash Address
+        | chip[0] | block[9:0] | page[5:0] | sector[1:0] |
+        """
+        addr = chip & NandConfig.CS_MASK
+        addr <<= NandConfig.CS_BITS
+        addr |= block & NandConfig.BLOCK_MASK
+        addr <<= NandConfig.BLOCK_BITS
+        addr |= page & NandConfig.PAGE_MASK
+        addr <<= NandConfig.PAGE_BITS
+        addr |= sector & NandConfig.SECTOR_MASK
+        return addr
 
     @staticmethod
     def create_nand_addr(block: int, page: int, col: int) -> bytearray:
@@ -376,7 +430,7 @@ class PageCodec:
         return data
 
     def decode(self, data: bytearray) -> bytearray | None:
-        assert len(data) == NandConfig.PAGE_USABLE_BYTES
+        assert len(data) == NandConfig.PAGE_ALL_BYTES
 
         # TODO: crc
         # TODO: ecc
