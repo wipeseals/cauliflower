@@ -52,15 +52,15 @@
           block = blockmng.alloc()
           info(f"Allocated Block: {block}")
 
-          read_data0 = blockmng.read(cs_index=0, block=block, page=0)
+          read_data0 = blockmng.read(chip_index=0, block=block, page=0)
           assert read_data0 is not None
           info(f"Read Data: {read_data0.hex()}")
 
           write_data = bytearray([(x * 2) & 0xFF for x in range(NandConfig.PAGE_ALL_BYTES)])
-          is_ok = blockmng.program(cs_index=0, block=block, page=0, data=write_data)
+          is_ok = blockmng.program(chip_index=0, block=block, page=0, data=write_data)
           info(f"Program Result: {is_ok}")
 
-          read_data1 = blockmng.read(cs_index=0, block=block, page=0)
+          read_data1 = blockmng.read(chip_index=0, block=block, page=0)
           assert read_data1 is not None
           info(f"Read Data: {read_data1.hex()}")
           info(f"Data Match: {read_data1 == write_data}")

@@ -55,30 +55,30 @@ class FlashTranslationLayer:
     # Physical Address Read
     ########################################################
 
-    def read_page(self, cs_index: int, block: int, page: int) -> bytearray | None:
+    def read_page(self, chip_index: int, block: int, page: int) -> bytearray | None:
         """指定されたページをすべて読み出し"""
         # データを読み込む
-        page_data = self.blockmng.read(cs_index, block, page)
+        page_data = self.blockmng.read(chip_index, block, page)
         if page_data is None:
             debug(
-                f"FTL\tread_page\tcs={cs_index}\tblock={block}\tpage={page}\tnot found"
+                f"FTL\tread_page\tcs={chip_index}\tblock={block}\tpage={page}\tnot found"
             )
             return None
         # データをデコード
         decode_page_data = self.codec.decode(page_data)
         if decode_page_data is None:
             debug(
-                f"FTL\tread_page\tcs={cs_index}\tblock={block}\tpage={page}\tdecode failed"
+                f"FTL\tread_page\tcs={chip_index}\tblock={block}\tpage={page}\tdecode failed"
             )
             return None
         return decode_page_data
 
     def read_sector(
-        self, cs_index: int, block: int, page: int, sector: int
+        self, chip_index: int, block: int, page: int, sector: int
     ) -> bytearray | None:
         """指定されたページのセクタを読み出し"""
         # データを読み込む
-        page_data = self.read_page(cs_index, block, page)
+        page_data = self.read_page(chip_index, block, page)
         if page_data is None:
             return None
         # ほしいSectorを取得
@@ -91,20 +91,22 @@ class FlashTranslationLayer:
     # Physical Address Write
     ########################################################
 
-    def write_page(self, cs_index: int, block: int, page: int, data: bytearray) -> bool:
+    def write_page(
+        self, chip_index: int, block: int, page: int, data: bytearray
+    ) -> bool:
         """指定されたページを書き込む"""
         # データをエンコード
         encode_page_data = self.codec.encode(data)
         if encode_page_data is None:
             debug(
-                f"FTL\twrite_page\tcs={cs_index}\tblock={block}\tpage={page}\tencode failed"
+                f"FTL\twrite_page\tcs={chip_index}\tblock={block}\tpage={page}\tencode failed"
             )
             return False
         # データを書き込む
-        result = self.blockmng.program(cs_index, block, page, encode_page_data)
+        result = self.blockmng.program(chip_index, block, page, encode_page_data)
         if not result:
             debug(
-                f"FTL\twrite_page\tcs={cs_index}\tblock={block}\tpage={page}\twrite failed"
+                f"FTL\twrite_page\tcs={chip_index}\tblock={block}\tpage={page}\twrite failed"
             )
             return False
         return True

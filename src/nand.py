@@ -245,11 +245,11 @@ class NandBlockManager:
         expect_id: bytearray = NandConfig.READ_ID_EXPECT,
     ) -> int:
         num_chip = 0
-        for cs_index in range(check_num_chip):
-            id = self._nandcmd.read_id(cs_index=cs_index)
+        for chip_index in range(check_num_chip):
+            id = self._nandcmd.read_id(chip_index=chip_index)
             is_ok = id == expect_id
             trace(
-                f"BLKMNG\t{self._check_chip_num.__name__}\tcs={cs_index}\tis_ok={is_ok}"
+                f"BLKMNG\t{self._check_chip_num.__name__}\tcs={chip_index}\tis_ok={is_ok}"
             )
             if not is_ok:
                 return num_chip
@@ -257,17 +257,17 @@ class NandBlockManager:
         return num_chip
 
     def _check_allbadblocks(
-        self, cs_index: CHIP, num_blocks: int = NandConfig.BLOCKS_PER_CS
+        self, chip_index: CHIP, num_blocks: int = NandConfig.BLOCKS_PER_CS
     ) -> int | None:
         badblock_bitmap = 0
         for block in range(num_blocks):
             data = self._nandcmd.read_page(
-                cs_index=cs_index, block=block, page=0, col=0, num_bytes=1
+                chip_index=chip_index, block=block, page=0, col=0, num_bytes=1
             )
             # Read Exception
             if data is None:
                 trace(
-                    f"BLKMNG\t{self._check_allbadblocks.__name__}\tcs={cs_index}\tblock={block}\tException"
+                    f"BLKMNG\t{self._check_allbadblocks.__name__}\tcs={chip_index}\tblock={block}\tException"
                 )
                 return None
             # Check Bad Block
@@ -275,7 +275,7 @@ class NandBlockManager:
             if is_bad:
                 badblock_bitmap |= 1 << block
             trace(
-                f"BLKMNG\t{self._check_allbadblocks.__name__}\tcs={cs_index}\tblock={block}\tis_bad={is_bad}"
+                f"BLKMNG\t{self._check_allbadblocks.__name__}\tcs={chip_index}\tblock={block}\tis_bad={is_bad}"
             )
         return badblock_bitmap
 
@@ -293,65 +293,65 @@ class NandBlockManager:
         # badblock
         if self.badblock_bitmaps is None:
             self.badblock_bitmaps = []
-        for cs_index in range(self.num_chip):
+        for chip_index in range(self.num_chip):
             # 片方のCSだけ初期値未設定ケースがあるので追加してからチェックした値をセット
-            if cs_index < len(self.badblock_bitmaps):
+            if chip_index < len(self.badblock_bitmaps):
                 # 既に設定済
                 pass
             else:
                 self.badblock_bitmaps.append(0)
-                bitmaps = self._check_allbadblocks(cs_index=cs_index)
+                bitmaps = self._check_allbadblocks(chip_index=chip_index)
                 if bitmaps is None:
                     raise ValueError("BadBlock Check Error")
                 else:
-                    self.badblock_bitmaps[cs_index] = bitmaps
-        for cs_index in range(self.num_chip):
+                    self.badblock_bitmaps[chip_index] = bitmaps
+        for chip_index in range(self.num_chip):
             trace(
-                f"BLKMNG\t{self.init.__name__}\tbadblock\tcs={cs_index}\t{self.badblock_bitmaps[cs_index]:0x}"
+                f"BLKMNG\t{self.init.__name__}\tbadblock\tcs={chip_index}\t{self.badblock_bitmaps[chip_index]:0x}"
             )
         # allocated bitmap
         self.allocated_bitmaps = [0] * self.num_chip
         # badblock部分は確保済としてマーク
-        for cs_index in range(self.num_chip):
-            self.allocated_bitmaps[cs_index] = self.badblock_bitmaps[cs_index]
-        for cs_index in range(self.num_chip):
+        for chip_index in range(self.num_chip):
+            self.allocated_bitmaps[chip_index] = self.badblock_bitmaps[chip_index]
+        for chip_index in range(self.num_chip):
             trace(
-                f"BLKMNG\t{self.init.__name__}\tallocated\tcs={cs_index}\t{self.allocated_bitmaps[cs_index]:0x}"
+                f"BLKMNG\t{self.init.__name__}\tallocated\tcs={chip_index}\t{self.allocated_bitmaps[chip_index]:0x}"
             )
 
     def _pick_free(self) -> tuple[CHIP | None, BLOCK | None]:
         # 先頭から空きを探す
-        for cs_index in range(self.num_chip):
+        for chip_index in range(self.num_chip):
             for block in range(NandConfig.BLOCKS_PER_CS):
                 # free & not badblock
-                if (self.allocated_bitmaps[cs_index] & (1 << block)) == 0 and (
-                    self.badblock_bitmaps[cs_index] & (1 << block)
+                if (self.allocated_bitmaps[chip_index] & (1 << block)) == 0 and (
+                    self.badblock_bitmaps[chip_index] & (1 << block)
                 ) == 0:
-                    return cs_index, block
+                    return chip_index, block
         return None, None
 
-    def _mark_alloc(self, cs_index: CHIP, block: BLOCK) -> None:
-        if (self.allocated_bitmaps[cs_index] & (1 << block)) != 0:
+    def _mark_alloc(self, chip_index: CHIP, block: BLOCK) -> None:
+        if (self.allocated_bitmaps[chip_index] & (1 << block)) != 0:
             raise ValueError("Block Already Allocated")
 
-        self.allocated_bitmaps[cs_index] |= 1 << block
+        self.allocated_bitmaps[chip_index] |= 1 << block
         trace(
-            f"BLKMNG\t{self._mark_alloc.__name__}\tcs={cs_index}\tblock={block}\t{self.allocated_bitmaps[cs_index]:0x}"
+            f"BLKMNG\t{self._mark_alloc.__name__}\tcs={chip_index}\tblock={block}\t{self.allocated_bitmaps[chip_index]:0x}"
         )
 
-    def _mark_free(self, cs_index: CHIP, block: BLOCK) -> None:
-        if (self.allocated_bitmaps[cs_index] & (1 << block)) == 0:
+    def _mark_free(self, chip_index: CHIP, block: BLOCK) -> None:
+        if (self.allocated_bitmaps[chip_index] & (1 << block)) == 0:
             raise ValueError("Block Already Free")
 
-        self.allocated_bitmaps[cs_index] &= ~(1 << block)
+        self.allocated_bitmaps[chip_index] &= ~(1 << block)
         trace(
-            f"BLKMNG\t{self._mark_free.__name__}\tcs={cs_index}\tblock={block}\t{self.allocated_bitmaps[cs_index]:0x}"
+            f"BLKMNG\t{self._mark_free.__name__}\tcs={chip_index}\tblock={block}\t{self.allocated_bitmaps[chip_index]:0x}"
         )
 
-    def _mark_bad(self, cs_index: CHIP, block: BLOCK) -> None:
-        self.badblock_bitmaps[cs_index] |= 1 << block
+    def _mark_bad(self, chip_index: CHIP, block: BLOCK) -> None:
+        self.badblock_bitmaps[chip_index] |= 1 << block
         trace(
-            f"BLKMNG\t{self._mark_bad.__name__}\tcs={cs_index}\tblock={block}\t{self.badblock_bitmaps[cs_index]:0x}"
+            f"BLKMNG\t{self._mark_bad.__name__}\tcs={chip_index}\tblock={block}\t{self.badblock_bitmaps[chip_index]:0x}"
         )
 
     def alloc(self) -> tuple[CHIP, BLOCK]:
@@ -361,36 +361,36 @@ class NandBlockManager:
                 raise ValueError("No Free Block")
             else:
                 # Erase OKのものを採用。だめならやり直し
-                is_erase_ok = self._nandcmd.erase_block(cs_index=cs, block=block)
+                is_erase_ok = self._nandcmd.erase_block(chip_index=cs, block=block)
                 if is_erase_ok:
-                    self._mark_alloc(cs_index=cs, block=block)
+                    self._mark_alloc(chip_index=cs, block=block)
                     trace(f"BLKMNG\t{self.alloc.__name__}\tcs={cs}\tblock={block}")
                     return cs, block
                 else:
                     # Erase失敗、BadBlockとしてマークし、Freeせず次のBlockを探す
-                    self._mark_bad(cs_index=cs, block=block)
+                    self._mark_bad(chip_index=cs, block=block)
                     trace(
                         f"BLKMNG\t{self.alloc.__name__}\tcs={cs}\tblock={block}\tErase Failed"
                     )
 
-    def free(self, cs_index: CHIP, block: BLOCK) -> None:
-        trace(f"BLKMNG\t{self.free.__name__}\tcs={cs_index}\tblock={block}")
-        self._mark_free(cs_index=cs_index, block=block)
+    def free(self, chip_index: CHIP, block: BLOCK) -> None:
+        trace(f"BLKMNG\t{self.free.__name__}\tcs={chip_index}\tblock={block}")
+        self._mark_free(chip_index=chip_index, block=block)
 
-    def read(self, cs_index: CHIP, block: BLOCK, page: PAGE) -> bytearray | None:
+    def read(self, chip_index: CHIP, block: BLOCK, page: PAGE) -> bytearray | None:
         trace(
-            f"BLKMNG\t{self.read.__name__}\tcs={cs_index}\tblock={block}\tpage={page}"
+            f"BLKMNG\t{self.read.__name__}\tcs={chip_index}\tblock={block}\tpage={page}"
         )
-        return self._nandcmd.read_page(cs_index=cs_index, block=block, page=page)
+        return self._nandcmd.read_page(chip_index=chip_index, block=block, page=page)
 
     def program(
-        self, cs_index: CHIP, block: BLOCK, page: PAGE, data: bytearray
+        self, chip_index: CHIP, block: BLOCK, page: PAGE, data: bytearray
     ) -> bool:
         trace(
-            f"BLKMNG\t{self.program.__name__}\tcs={cs_index}\tblock={block}\tpage={page}"
+            f"BLKMNG\t{self.program.__name__}\tcs={chip_index}\tblock={block}\tpage={page}"
         )
         return self._nandcmd.program_page(
-            cs_index=cs_index, block=block, page=page, data=data
+            chip_index=chip_index, block=block, page=page, data=data
         )
 
 

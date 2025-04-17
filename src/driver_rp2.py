@@ -68,19 +68,19 @@ class NandIo:
         for pin in self._io:
             pin.init(Pin.OUT if is_output else Pin.IN)
 
-    def set_ceb(self, cs_index: int | None) -> None:
+    def set_ceb(self, chip_index: int | None) -> None:
         # status indicator
         self._led.toggle()
 
-        assert cs_index is None or cs_index in [0, 1]
-        if cs_index is None:
+        assert chip_index is None or chip_index in [0, 1]
+        if chip_index is None:
             trace("CS\tNone")
             self._ceb0.on()
             self._ceb1.on()
         else:
-            trace(f"IO\tCS\t{cs_index}")
-            self._ceb0.value(0 if cs_index == 0 else 1)
-            self._ceb1.value(0 if cs_index == 1 else 1)
+            trace(f"IO\tCS\t{chip_index}")
+            self._ceb0.value(0 if chip_index == 0 else 1)
+            self._ceb1.value(0 if chip_index == 1 else 1)
 
     def set_cle(self, value: int) -> None:
         self._cle.value(value)
@@ -191,13 +191,13 @@ class NandCommander:
     ########################################################
     # Communication functions
     ########################################################
-    def read_id(self, cs_index: int, num_bytes: int = 5) -> bytearray:
+    def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
         nandio = self._nandio
 
         # initialize
         nandio.init_pin()
         # CS select
-        nandio.set_ceb(cs_index=cs_index)
+        nandio.set_ceb(chip_index=chip_index)
         # Command Input
         nandio.input_cmd(NandCmd.READ_ID)
         # Address Input
@@ -207,13 +207,13 @@ class NandCommander:
         # CS deselect
         nandio.set_ceb(None)
 
-        trace(f"CMD\t{self.read_id.__name__}\tcs={cs_index}\tid={id.hex()}")
+        trace(f"CMD\t{self.read_id.__name__}\tcs={chip_index}\tid={id.hex()}")
 
         return id
 
     def read_page(
         self,
-        cs_index: int,
+        chip_index: int,
         block: int,
         page: int,
         col: int = 0,
@@ -224,7 +224,7 @@ class NandCommander:
         # initialize
         nand.init_pin()
         # CS select
-        nand.set_ceb(cs_index=cs_index)
+        nand.set_ceb(chip_index=chip_index)
         # 1st Command Input
         nand.input_cmd(NandCmd.READ_1ST)
         # Address Input
@@ -242,12 +242,12 @@ class NandCommander:
         nand.set_ceb(None)
         return data
 
-    def read_status(self, cs_index: int) -> int:
+    def read_status(self, chip_index: int) -> int:
         nand = self._nandio
         # initialize
         nand.init_pin()
         # CS select
-        nand.set_ceb(cs_index=cs_index)
+        nand.set_ceb(chip_index=chip_index)
         # Command Input
         nand.input_cmd(NandCmd.STATUS_READ)
         # Status Read
@@ -256,13 +256,13 @@ class NandCommander:
         nand.set_ceb(None)
         return status[0]
 
-    def erase_block(self, cs_index: int, block: int) -> bool:
+    def erase_block(self, chip_index: int, block: int) -> bool:
         block_addr = NandConfig.create_block_addr(block=block)
         nand = self._nandio
         # initialize
         nand.init_pin()
         # CS select
-        nand.set_ceb(cs_index=cs_index)
+        nand.set_ceb(chip_index=chip_index)
         # 1st Command Input
         nand.input_cmd(NandCmd.ERASE_1ST)
         # Address Input
@@ -278,17 +278,17 @@ class NandCommander:
         nand.set_ceb(None)
 
         # status read (erase result)
-        status = self.read_status(cs_index=cs_index)
+        status = self.read_status(chip_index=chip_index)
         is_ok = (status & NandStatus.PROGRAM_ERASE_FAIL) == 0
 
         trace(
-            f"CMD\t{self.erase_block.__name__}\tcs={cs_index}\tblock={block}\tis_ok={is_ok}\tstatus={status:02X}"
+            f"CMD\t{self.erase_block.__name__}\tcs={chip_index}\tblock={block}\tis_ok={is_ok}\tstatus={status:02X}"
         )
         return is_ok
 
     def program_page(
         self,
-        cs_index: int,
+        chip_index: int,
         block: int,
         page: int,
         data: bytearray,
@@ -299,7 +299,7 @@ class NandCommander:
         # initialize
         nand.init_pin()
         # CS select
-        nand.set_ceb(cs_index=cs_index)
+        nand.set_ceb(chip_index=chip_index)
         # 1st Command Input
         nand.input_cmd(NandCmd.PROGRAM_1ST)
         # Address Input
@@ -321,10 +321,10 @@ class NandCommander:
         nand.set_ceb(None)
 
         # status read (program result)
-        status = self.read_status(cs_index=cs_index)
+        status = self.read_status(chip_index=chip_index)
         is_ok = (status & NandStatus.PROGRAM_ERASE_FAIL) == 0
 
         trace(
-            f"CMD\t{self.program_page.__name__}\tcs={cs_index}\tblock={block}\tpage={page}\tis_ok={is_ok}\tstatus={status:02X}"
+            f"CMD\t{self.program_page.__name__}\tcs={chip_index}\tblock={block}\tpage={page}\tis_ok={is_ok}\tstatus={status:02X}"
         )
         return is_ok
