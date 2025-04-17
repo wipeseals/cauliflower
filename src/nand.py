@@ -93,11 +93,11 @@ class NandConfig:
         | chip[0] | block[9:0] | page[5:0] | sector[1:0] |
         """
         addr = chip & NandConfig.CS_MASK
-        addr <<= NandConfig.CS_BITS
-        addr |= block & NandConfig.BLOCK_MASK
         addr <<= NandConfig.BLOCK_BITS
-        addr |= page & NandConfig.PAGE_MASK
+        addr |= block & NandConfig.BLOCK_MASK
         addr <<= NandConfig.PAGE_BITS
+        addr |= page & NandConfig.PAGE_MASK
+        addr <<= NandConfig.SECTOR_BITS
         addr |= sector & NandConfig.SECTOR_MASK
         return addr
 
@@ -339,7 +339,7 @@ class NandBlockManager:
             f"BLKMNG\t{self._mark_bad.__name__}\tcs={cs_index}\tblock={block}\t{self.badblock_bitmaps[cs_index]:0x}"
         )
 
-    def alloc(self) -> int:
+    def alloc(self) -> tuple[int, int]:
         while True:
             cs, block = self._pick_free()
             if block is None or cs is None:
@@ -350,7 +350,7 @@ class NandBlockManager:
                 if is_erase_ok:
                     self._mark_alloc(cs_index=cs, block=block)
                     trace(f"BLKMNG\t{self.alloc.__name__}\tcs={cs}\tblock={block}")
-                    return block
+                    return cs, block
                 else:
                     # Erase失敗、BadBlockとしてマークし、Freeせず次のBlockを探す
                     self._mark_bad(cs_index=cs, block=block)
