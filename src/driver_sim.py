@@ -15,7 +15,7 @@ class NandCommander:
         nandio: NandIo,
         num_chip: int = 1,
         base_dir: str | None = None,
-        ram_cache: bool = True,
+        ram_cache: bool = False,
     ) -> None:
         self._nandio = nandio
         self._num_chip = num_chip
