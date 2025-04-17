@@ -25,7 +25,7 @@ class Mapping:
     def unmap(self, lba: LBA) -> None:
         """LBAのマッピング削除"""
         trace(f"MAP\tunmap\tLBA={lba}\tPBA={self.l2p.get(lba)}")
-        self.l2p.pop(lba)
+        self.l2p.pop(lba, None)
 
 
 class FlashTranslationLayer:
