@@ -123,6 +123,9 @@ class FlashTranslationLayer:
                 sector_index * NandConfig.SECTOR_BYTES : (sector_index + 1)
                 * NandConfig.SECTOR_BYTES
             ]
+            trace(
+                f"Read LBA {lba} from Write Buffer: {sector_data.hex()}"
+            )
             return sector_data
         # LBA -> PBAの変換
         pba = self.mapping.resolve(lba)
@@ -203,9 +206,9 @@ def main() -> None:
     def create_test_data(lba: LBA) -> bytearray:
         return bytearray([lba] * NandConfig.SECTOR_BYTES)
 
-    for lba in range(0, 8):
+    for lba in range(0, 10):
         ftl.write_logical(lba, create_test_data(lba))
-    for lba in range(0, 8):
+    for lba in reversed(range(0, 10)):
         read_data = ftl.read_logical(lba)
         assert read_data is not None, f"Read data is None for LBA {lba}"
 
