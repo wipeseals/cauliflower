@@ -62,12 +62,16 @@ class FlashTranslationLayer:
         # データを読み込む
         page_data = self.blockmng.read(cs_index, block, page)
         if page_data is None:
-            debug(f"Read CS{cs_index} Block{block} Page{page} failed")
+            debug(
+                f"FTL\tread_page\tcs={cs_index}\tblock={block}\tpage={page}\tnot found"
+            )
             return None
         # データをデコード
         decode_page_data = self.codec.decode(page_data)
         if decode_page_data is None:
-            debug(f"Decode CS{cs_index} Block{block} Page{page} failed")
+            debug(
+                f"FTL\tread_page\tcs={cs_index}\tblock={block}\tpage={page}\tdecode failed"
+            )
             return None
         return decode_page_data
 
@@ -78,7 +82,6 @@ class FlashTranslationLayer:
         # データを読み込む
         page_data = self.read_page(cs_index, block, page)
         if page_data is None:
-            debug(f"Read CS{cs_index} Block{block} Page{page} failed")
             return None
         # ほしいSectorを取得
         sector_data = page_data[
@@ -95,12 +98,16 @@ class FlashTranslationLayer:
         # データをエンコード
         encode_page_data = self.codec.encode(data)
         if encode_page_data is None:
-            debug(f"Encode CS{cs_index} Block{block} Page{page} failed")
+            debug(
+                f"FTL\twrite_page\tcs={cs_index}\tblock={block}\tpage={page}\tencode failed"
+            )
             return False
         # データを書き込む
         result = self.blockmng.program(cs_index, block, page, encode_page_data)
         if not result:
-            debug(f"Write CS{cs_index} Block{block} Page{page} failed")
+            debug(
+                f"FTL\twrite_page\tcs={cs_index}\tblock={block}\tpage={page}\twrite failed"
+            )
             return False
         return True
 
@@ -124,20 +131,20 @@ class FlashTranslationLayer:
                 * NandConfig.SECTOR_BYTES
             ]
             trace(
-                f"Read LBA {lba} from Write Buffer: {sector_data.hex()}"
+                f"FTL\tread_logical\tlba={lba}\tsector_index={sector_index}\tread from write buffer"
             )
             return sector_data
         # LBA -> PBAの変換
         pba = self.mapping.resolve(lba)
         if pba is None:
-            debug(f"Read LBA {lba} failed: PBA not found")
+            debug(f"FTL\tread_logical\tlba={lba}\tPBA not found")
             return self.unmap_sector()
 
         # PBAをCS, Block, Page, Sectorに展開して読み出し
         chip, block, page, sector = NandConfig.decode_phys_addr(pba)
         sector_data = self.read_sector(chip, block, page, sector)
         if sector_data is None:
-            debug(f"Read PBA {pba} failed")
+            debug(f"FTL\tread_logical\tlba={lba}\read error")
             return self.unmap_sector()
         return sector_data
 
@@ -171,6 +178,9 @@ class FlashTranslationLayer:
         ] = data
         # Write Buffer上のLBA情報を更新
         self.write_buffer_lbas.append(lba)
+        trace(
+            f"FTL\twrite_logical\tlba={lba}\tpba={pba}\tchip={self.current_write_chip}\tblock={self.current_write_block}\tpage={self.current_write_page}\tsector={self.current_write_sector}\twrite buffer updated"
+        )
 
         # Write Bufferがいっぱいになったら書き込み
         if len(self.write_buffer_lbas) < NandConfig.SECTOR_PER_PAGE:
@@ -184,6 +194,9 @@ class FlashTranslationLayer:
                 self.current_write_block,
                 self.current_write_page,
                 self.write_buffer,
+            )
+            trace(
+                f"FTL\twrite_logical\tlba={lba}\tpba={pba}\tchip={self.current_write_chip}\tblock={self.current_write_block}\tpage={self.current_write_page}\tsector={self.current_write_sector}\tlbas={self.write_buffer_lbas}\twrite buffer flushed"
             )
             # 書き込み先LBAを初期化
             self.write_buffer_lbas = list()
