@@ -1,10 +1,8 @@
 from log import error, warn, trace, debug, info, LogLevel
-from nand import NandConfig, NandBlockManager, PageCodec, get_driver
+from nand import NandConfig, NandBlockManager, PageCodec, get_driver, PBA
 
 # Logical Block Address
 LBA = int
-# Physical Block Address
-PBA = int
 
 
 class Mapping:

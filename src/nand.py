@@ -3,6 +3,21 @@ import json
 import math
 from log import error, trace, debug, info, LogLevel
 
+# Physical Block Address
+PBA = int
+# chip id type
+CHIP = int
+# block id type
+BLOCK = int
+# page type
+PAGE = int
+# sector type
+SECTOR = int
+# column type
+COLUMN = int
+# block bitmap type
+BLOCK_BITMAP = int
+
 
 ############################################################################
 # NAND Flash Definitions for TC58NVG0S3HTA00
@@ -73,7 +88,7 @@ class NandConfig:
     CS_MASK = (1 << CS_BITS) - 1
 
     @staticmethod
-    def decode_phys_addr(addr: int) -> tuple[int, int, int, int]:
+    def decode_phys_addr(addr: PBA) -> tuple[CHIP, BLOCK, PAGE, SECTOR]:
         """Decode NAND Flash Address
         | chip[0] | block[9:0] | page[5:0] | sector[1:0] |
         """
@@ -88,7 +103,7 @@ class NandConfig:
         return chip, block, page, sector
 
     @staticmethod
-    def encode_phys_addr(chip: int, block: int, page: int, sector: int) -> int:
+    def encode_phys_addr(chip: CHIP, block: BLOCK, page: PAGE, sector: SECTOR) -> PBA:
         """Encode NAND Flash Address
         | chip[0] | block[9:0] | page[5:0] | sector[1:0] |
         """
@@ -102,7 +117,7 @@ class NandConfig:
         return addr
 
     @staticmethod
-    def create_nand_addr(block: int, page: int, col: int) -> bytearray:
+    def create_nand_addr(block: BLOCK, page: PAGE, col: COLUMN) -> bytearray:
         """Create NAND Flash Address
 
         | cycle# | Data                  |
@@ -120,7 +135,7 @@ class NandConfig:
         return addr
 
     @staticmethod
-    def create_block_addr(block: int) -> bytearray:
+    def create_block_addr(block: BLOCK) -> bytearray:
         """Create NAND Flash Block Address
 
         | cycle | Data      |
@@ -169,7 +184,7 @@ class NandBlockManager:
         nandcmd: d_sim.NandCommander | d_rp2.NandCommander,
         # initialized values
         is_initial: bool = False,
-        num_chip: int = 0,
+        num_chip: CHIP = 0,
         initial_badblock_bitmaps: list[int] | None = None,
     ) -> None:
         self._nandcmd = nandcmd
@@ -184,7 +199,7 @@ class NandBlockManager:
 
         if is_initial:
             trace(f"BLKMNG\t{self.__init__.__name__}\tinitialize")
-            self.num_chip = num_chip
+            self.num_chip: CHIP = num_chip
             self.badblock_bitmaps = (
                 initial_badblock_bitmaps if initial_badblock_bitmaps else []
             )
@@ -226,7 +241,7 @@ class NandBlockManager:
     ########################################################
     def _check_chip_num(
         self,
-        check_num_chip: int = 2,
+        check_num_chip: CHIP = 2,
         expect_id: bytearray = NandConfig.READ_ID_EXPECT,
     ) -> int:
         num_chip = 0
@@ -242,7 +257,7 @@ class NandBlockManager:
         return num_chip
 
     def _check_allbadblocks(
-        self, cs_index: int, num_blocks: int = NandConfig.BLOCKS_PER_CS
+        self, cs_index: CHIP, num_blocks: int = NandConfig.BLOCKS_PER_CS
     ) -> int | None:
         badblock_bitmap = 0
         for block in range(num_blocks):
@@ -304,7 +319,7 @@ class NandBlockManager:
                 f"BLKMNG\t{self.init.__name__}\tallocated\tcs={cs_index}\t{self.allocated_bitmaps[cs_index]:0x}"
             )
 
-    def _pick_free(self) -> tuple[int | None, int | None]:
+    def _pick_free(self) -> tuple[CHIP | None, BLOCK | None]:
         # 先頭から空きを探す
         for cs_index in range(self.num_chip):
             for block in range(NandConfig.BLOCKS_PER_CS):
@@ -315,7 +330,7 @@ class NandBlockManager:
                     return cs_index, block
         return None, None
 
-    def _mark_alloc(self, cs_index: int, block: int) -> None:
+    def _mark_alloc(self, cs_index: CHIP, block: BLOCK) -> None:
         if (self.allocated_bitmaps[cs_index] & (1 << block)) != 0:
             raise ValueError("Block Already Allocated")
 
@@ -324,7 +339,7 @@ class NandBlockManager:
             f"BLKMNG\t{self._mark_alloc.__name__}\tcs={cs_index}\tblock={block}\t{self.allocated_bitmaps[cs_index]:0x}"
         )
 
-    def _mark_free(self, cs_index: int, block: int) -> None:
+    def _mark_free(self, cs_index: CHIP, block: BLOCK) -> None:
         if (self.allocated_bitmaps[cs_index] & (1 << block)) == 0:
             raise ValueError("Block Already Free")
 
@@ -333,13 +348,13 @@ class NandBlockManager:
             f"BLKMNG\t{self._mark_free.__name__}\tcs={cs_index}\tblock={block}\t{self.allocated_bitmaps[cs_index]:0x}"
         )
 
-    def _mark_bad(self, cs_index: int, block: int) -> None:
+    def _mark_bad(self, cs_index: CHIP, block: BLOCK) -> None:
         self.badblock_bitmaps[cs_index] |= 1 << block
         trace(
             f"BLKMNG\t{self._mark_bad.__name__}\tcs={cs_index}\tblock={block}\t{self.badblock_bitmaps[cs_index]:0x}"
         )
 
-    def alloc(self) -> tuple[int, int]:
+    def alloc(self) -> tuple[CHIP, BLOCK]:
         while True:
             cs, block = self._pick_free()
             if block is None or cs is None:
@@ -358,17 +373,19 @@ class NandBlockManager:
                         f"BLKMNG\t{self.alloc.__name__}\tcs={cs}\tblock={block}\tErase Failed"
                     )
 
-    def free(self, cs_index: int, block: int) -> None:
+    def free(self, cs_index: CHIP, block: BLOCK) -> None:
         trace(f"BLKMNG\t{self.free.__name__}\tcs={cs_index}\tblock={block}")
         self._mark_free(cs_index=cs_index, block=block)
 
-    def read(self, cs_index: int, block: int, page: int) -> bytearray | None:
+    def read(self, cs_index: CHIP, block: BLOCK, page: PAGE) -> bytearray | None:
         trace(
             f"BLKMNG\t{self.read.__name__}\tcs={cs_index}\tblock={block}\tpage={page}"
         )
         return self._nandcmd.read_page(cs_index=cs_index, block=block, page=page)
 
-    def program(self, cs_index: int, block: int, page: int, data: bytearray) -> bool:
+    def program(
+        self, cs_index: CHIP, block: BLOCK, page: PAGE, data: bytearray
+    ) -> bool:
         trace(
             f"BLKMNG\t{self.program.__name__}\tcs={cs_index}\tblock={block}\tpage={page}"
         )
