@@ -369,8 +369,8 @@ class PageCodec:
     def encode(self, data: bytearray) -> bytearray:
         assert len(data) == NandConfig.PAGE_USABLE_BYTES
         # TODO: scramble
-        lfsr = Lfsr8(seed=self._scramble_seed)
-        data = bytearray([lfsr.next() ^ x for x in data])
+        # lfsr = Lfsr8(seed=self._scramble_seed)
+        # data = bytearray([lfsr.next() ^ x for x in data])
         # TODO: ecc
         # TODO: crc
         return data
@@ -381,7 +381,7 @@ class PageCodec:
         # TODO: crc
         # TODO: ecc
         # TODO: descramble
-        lfsr = Lfsr8(seed=self._scramble_seed)
-        data = bytearray([lfsr.next() ^ x for x in data])
+        # lfsr = Lfsr8(seed=self._scramble_seed)
+        # data = bytearray([lfsr.next() ^ x for x in data])
         # TODO: CRC Errorを解消できなかった場合、エラー応答する
         return data
