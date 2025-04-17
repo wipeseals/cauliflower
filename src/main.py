@@ -144,7 +144,7 @@ class FlashTranslationLayer:
         chip, block, page, sector = NandConfig.decode_phys_addr(pba)
         sector_data = self.read_sector(chip, block, page, sector)
         if sector_data is None:
-            debug(f"FTL\tread_logical\tlba={lba}\read error")
+            debug(f"FTL\tread_logical\tlba={lba}\tread error")
             return self.unmap_sector()
         return sector_data
 
